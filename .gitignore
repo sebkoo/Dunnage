@@ -1,0 +1,11 @@
+.build/
+.swiftpm/
+DerivedData/
+*.xcresult
+xcuserdata/
+*.xcuserstate
+.DS_Store
+.claude/settings.local.json
+cdk.out/
+node_modules/
+.env

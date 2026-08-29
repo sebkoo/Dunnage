@@ -1,0 +1,14 @@
+REPLACE THIS FILE with your chosen license text before running bootstrap.sh:
+
+    curl -fsSL https://www.apache.org/licenses/LICENSE-2.0.txt -o LICENSE
+
+bootstrap.sh only checks that this file exists and is non-empty. It does not
+verify the contents — putting the right text here is your decision, and a
+string check would only pretend to be a verification.
+
+The first commit must not depend on whether the network was up, which is why
+the license is a checked-in artifact rather than something fetched at run time.
+
+MIT is a fine alternative. Apache-2.0 is the default here for its express
+patent grant, which is what lets someone at a company contribute without
+asking legal first.
