@@ -81,7 +81,7 @@ final class InterruptionTests: XCTestCase {
                 .authorityReported(try await transport.confirmedProgress(in: session)),
                 &state, context)
 
-            guard case .send(let transfers, _)? = scheduled.first else {
+            guard case .send(let transfers, _, _)? = scheduled.first else {
                 return XCTFail("\(context): the authority's answer must schedule the rest")
             }
             XCTAssertEqual(transfers.map(\.chunk),

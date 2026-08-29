@@ -15,6 +15,10 @@
 /// say that an interruption is grounds for abandoning an upload, and it is not.
 /// See docs/adr/0002-interruption-is-not-a-failure.md.
 public enum FailureReason: Hashable, Sendable {
+    /// Some chunk spent the last of its retry budget. A decision, taken against a rule that
+    /// was on the log before the first byte moved.
+    case retriesExhausted
+
     /// Cancelled from inside the app. Deliberate, and not an error.
     case taskCancelled
 

@@ -114,7 +114,7 @@ final class DuplicateConfirmationTests: XCTestCase {
                          .offset(ByteOffset(8))] {
             let twice = UploadTransition.replay(opened + [report(progress), report(progress)])
 
-            guard case .transferring(_, _, let confirmed) = twice else {
+            guard case .transferring(_, _, let confirmed, _) = twice else {
                 return XCTFail("\(progress): two partial confirmations are not a complete upload")
             }
             XCTAssertEqual(confirmed, progress,
@@ -152,7 +152,7 @@ final class DuplicateConfirmationTests: XCTestCase {
             }
             state = next
 
-            guard case .send(let transfers, _)? = effects.first else {
+            guard case .send(let transfers, _, _)? = effects.first else {
                 return XCTFail("fold \(round): the unconfirmed chunks are still outstanding")
             }
             XCTAssertTrue(Set(transfers.map(\.chunk)).isDisjoint(with: held),

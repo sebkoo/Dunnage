@@ -97,9 +97,17 @@ public struct UploadIntent: Hashable, Sendable {
     public let destination: DestinationRef
     public let plan: ChunkPlan
 
-    public init(upload: UploadID, destination: DestinationRef, plan: ChunkPlan) {
+    /// How hard to try. Part of the intent because the declaration is what reaches the log,
+    /// and a rule the fold consults has to arrive with the events it judges.
+    public let policy: RetryPolicy
+
+    public init(upload: UploadID,
+                destination: DestinationRef,
+                plan: ChunkPlan,
+                policy: RetryPolicy = .default) {
         self.upload = upload
         self.destination = destination
         self.plan = plan
+        self.policy = policy
     }
 }

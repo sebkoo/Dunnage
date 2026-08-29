@@ -24,23 +24,37 @@ public enum UploadMachineState: Hashable, Sendable {
     case declared(intent: UploadIntent)
 
     /// A transport operation is open. `confirmed` is `nil` until the authority has been
-    /// asked — which is not the same as an authority that holds nothing.
+    /// asked — which is not the same as an authority that holds nothing. `attempts` is what
+    /// each chunk has spent against the intent's retry policy.
     case transferring(intent: UploadIntent,
                       session: TransportSessionID,
-                      confirmed: ConfirmedProgress?)
+                      confirmed: ConfirmedProgress?,
+                      attempts: Attempts)
 
     /// Every planned chunk is confirmed and finalization has been asked for. The
     /// confirmation is not optional here: this phase is unreachable without one.
+    ///
+    /// The tally comes along rather than being dropped. An authority that later reports
+    /// less sends this upload back to `.transferring`, and it should arrive there knowing
+    /// what it has already spent rather than with a budget that quietly reset.
     case finalizing(intent: UploadIntent,
                     session: TransportSessionID,
-                    confirmed: ConfirmedProgress)
+                    confirmed: ConfirmedProgress,
+                    attempts: Attempts)
 
     /// Terminal. The authority reported the object exists.
     case completed(intent: UploadIntent)
 
     /// Terminal. The upload was given up on, and the class of failure is retained because
     /// the classes have different recovery paths.
-    case failed(intent: UploadIntent, reason: FailureReason)
+    ///
+    /// `confirmed` is what the authority last said it held. Giving up is not a reason to
+    /// forget it: the confirmed set is the difference between an upload that can be picked
+    /// up later and one that starts again from zero. It is `nil` only when the upload was
+    /// abandoned before the authority had ever been asked.
+    case failed(intent: UploadIntent,
+                reason: FailureReason,
+                confirmed: ConfirmedProgress?)
 
     public var phase: UploadPhase {
         switch self {

@@ -26,14 +26,28 @@ public enum RejectionReason: Hashable, Sendable {
     case confirmationFromAnotherTransportSession
     /// The phase is terminal. No event leaves it.
     case terminalPhaseIsAbsorbing
+    /// The event names a chunk this upload never planned. It is not evidence about this
+    /// upload, so it does not get to spend this upload's retry budget.
+    case chunkIsNotInThisPlan
 }
 
 /// Work for the driver. Data, not behaviour.
 public enum UploadEffect: Hashable, Sendable {
     case openTransportSession(UploadID)
     case askAuthorityForConfirmedProgress(UploadID, TransportSessionID)
-    case send([PlannedTransfer], TransportSessionID)
+    /// Transfer these spans, no sooner than `after` from now.
+    ///
+    /// The wait is data. Core computes it from the retry policy and the attempts already
+    /// spent; the driver is the thing that waits, behind its own injected clock. Nothing in
+    /// Core reads a clock, sleeps, or runs a timer.
+    case send([PlannedTransfer], TransportSessionID, after: Duration)
     case finalize(UploadID, TransportSessionID)
+    /// Give up on this upload: append `.abandoned(reason)`.
+    ///
+    /// Core asks; it does not enter `.failed` on its own. That is what makes the entry a
+    /// decision rather than a drift, and it keeps `.abandoned` the one event that reaches
+    /// the terminal phase.
+    case abandon(UploadID, FailureReason)
 }
 
 /// The result of offering an event to the machine. Every pair produces one of these; there
@@ -80,7 +94,8 @@ public enum UploadTransition {
             // Ask before sending. A fresh session is not assumed to hold nothing; Core
             // asks the authority and plans from the answer.
             return .accepted(
-                .transferring(intent: intent, session: session, confirmed: nil),
+                .transferring(intent: intent, session: session,
+                              confirmed: nil, attempts: Attempts()),
                 [.askAuthorityForConfirmedProgress(intent.upload, session)])
 
         case (.declared, .chunkTransferReported),
@@ -91,7 +106,8 @@ public enum UploadTransition {
             return .rejected(.noTransportSession)
 
         case (.declared(let intent), .abandoned(let reason)):
-            return .accepted(.failed(intent: intent, reason: reason), [])
+            // Nothing was ever asked of the authority, so there is nothing to keep.
+            return .accepted(.failed(intent: intent, reason: reason, confirmed: nil), [])
 
         // ---- transferring: a transport operation is open ----
 
@@ -101,31 +117,51 @@ public enum UploadTransition {
         case (.transferring, .transportSessionOpened):
             return .rejected(.transportSessionAlreadyOpen)
 
-        case (.transferring(let intent, let session, _), .chunkTransferReported),
-             (.transferring(let intent, let session, _), .chunkTransferRefused):
+        case (.transferring(let intent, let session, _, _), .chunkTransferReported):
             // The state is returned untouched. A transport's report is an observation;
             // it does not confirm anything. All it does is send Core to ask.
             return .accepted(state, [.askAuthorityForConfirmedProgress(intent.upload, session)])
 
-        case (.transferring(let intent, let session, _), .chunkTransferInterrupted):
+        case (.transferring(let intent, let session, _, _), .chunkTransferInterrupted):
             // Untouched too, and the reason it is untouched is the whole invariant. A
             // report and a refusal are answers; this is the absence of one. The chunk is
             // unconfirmed — not failed, and not landed — and nothing here is allowed to
-            // decide which. Core asks; the authority settles it.
+            // decide which. It costs no budget, because nothing was learned. Core asks;
+            // the authority settles it.
             return .accepted(state, [.askAuthorityForConfirmedProgress(intent.upload, session)])
 
-        case (.transferring(let intent, let session, _), .authorityReported(let confirmation)):
+        case (.transferring(let intent, let session, let confirmed, let attempts),
+              .chunkTransferRefused(let chunk)):
+            // The one observation that costs something. It is still not a statement by the
+            // authority, so confirmed progress does not move and Core still goes and asks —
+            // but the transport answered no about this chunk, and that is an attempt.
+            //
+            // The plan is checked first because this is the event that spends a budget: a
+            // refusal naming a chunk this upload never planned is not evidence about this
+            // upload, and it does not get to exhaust it. A report and an interruption need
+            // no such guard; they spend nothing.
+            guard intent.plan.range(of: chunk) != nil else {
+                return .rejected(.chunkIsNotInThisPlan)
+            }
+            return .accepted(
+                .transferring(intent: intent, session: session,
+                              confirmed: confirmed, attempts: attempts.charging(chunk)),
+                [.askAuthorityForConfirmedProgress(intent.upload, session)])
+
+        case (.transferring(let intent, let session, _, let attempts),
+              .authorityReported(let confirmation)):
             return admit(confirmation, for: intent, in: session) {
                 settle(intent: intent, session: session,
                        progress: confirmation.progress,
+                       attempts: attempts.afterTheAuthorityAnswered(),
                        finalizeAlreadyRequested: false)
             }
 
         case (.transferring, .finalized):
             return .rejected(.notReadyToFinalize)
 
-        case (.transferring(let intent, _, _), .abandoned(let reason)):
-            return .accepted(.failed(intent: intent, reason: reason), [])
+        case (.transferring(let intent, _, let confirmed, _), .abandoned(let reason)):
+            return .accepted(.failed(intent: intent, reason: reason, confirmed: confirmed), [])
 
         // ---- finalizing: everything confirmed, object not yet created ----
 
@@ -140,18 +176,20 @@ public enum UploadTransition {
              (.finalizing, .chunkTransferInterrupted):
             return .rejected(.allChunksAlreadyConfirmed)
 
-        case (.finalizing(let intent, let session, _), .authorityReported(let confirmation)):
+        case (.finalizing(let intent, let session, _, let attempts),
+              .authorityReported(let confirmation)):
             return admit(confirmation, for: intent, in: session) {
                 settle(intent: intent, session: session,
                        progress: confirmation.progress,
+                       attempts: attempts.afterTheAuthorityAnswered(),
                        finalizeAlreadyRequested: true)
             }
 
-        case (.finalizing(let intent, _, _), .finalized):
+        case (.finalizing(let intent, _, _, _), .finalized):
             return .accepted(.completed(intent: intent), [])
 
-        case (.finalizing(let intent, _, _), .abandoned(let reason)):
-            return .accepted(.failed(intent: intent, reason: reason), [])
+        case (.finalizing(let intent, _, let confirmed, _), .abandoned(let reason)):
+            return .accepted(.failed(intent: intent, reason: reason, confirmed: confirmed), [])
 
         // ---- terminal: absorbing ----
 
@@ -186,16 +224,40 @@ public enum UploadTransition {
     private static func settle(intent: UploadIntent,
                                session: TransportSessionID,
                                progress: ConfirmedProgress,
+                               attempts: Attempts,
                                finalizeAlreadyRequested: Bool) -> TransitionOutcome {
         let remaining = ResumePlan.derive(for: intent, given: progress).transfers
 
         guard remaining.isEmpty else {
+            let next = UploadMachineState.transferring(intent: intent, session: session,
+                                                       confirmed: progress, attempts: attempts)
+
+            // Exhaustion is decided here, against a fresh answer from the authority, and
+            // nowhere else. A chunk that spent its last attempt and then landed anyway is
+            // not in `remaining` at all, and this upload carries on.
+            //
+            // The effect asks the driver to give up; it does not give up. `.abandoned` stays
+            // the only event that reaches a terminal phase, so entering one is a decision on
+            // the log rather than a state the fold slid into.
+            let spent = remaining.map(\.chunk).contains {
+                intent.policy.isExhausted(after: attempts.count(for: $0))
+            }
+            guard !spent else {
+                return .accepted(next, [.abandon(intent.upload, .retriesExhausted)])
+            }
+
+            // The wait the next round has earned, computed against the worst-affected
+            // outstanding chunk. Refusals are evidence about the endpoint, not only about
+            // the one chunk that collected them, and sending the untried chunks straight
+            // back into it is the thing backoff exists to prevent.
+            let attempt = attempts.highest(among: remaining.map(\.chunk)) + 1
             return .accepted(
-                .transferring(intent: intent, session: session, confirmed: progress),
-                [.send(remaining, session)])
+                next,
+                [.send(remaining, session, after: intent.policy.backoff(beforeAttempt: attempt))])
         }
         return .accepted(
-            .finalizing(intent: intent, session: session, confirmed: progress),
+            .finalizing(intent: intent, session: session,
+                        confirmed: progress, attempts: attempts),
             finalizeAlreadyRequested ? [] : [.finalize(intent.upload, session)])
     }
 }

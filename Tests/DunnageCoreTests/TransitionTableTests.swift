@@ -94,7 +94,7 @@ final class TransitionTableTests: XCTestCase {
             .declared:               .rejected(.uploadAlreadyDeclared),
             .transportSessionOpened: .rejected(.transportSessionAlreadyOpen),
             .chunkTransferReported:  .accepted(.transferring),
-            .chunkTransferRefused:   .accepted(.transferring),
+            .chunkTransferRefused:   .accepted(.transferring),   // representative is in the plan
             .chunkTransferInterrupted: .accepted(.transferring),
             .authorityReported:      .accepted(.transferring),   // representative confirms nothing
             .finalized:              .rejected(.notReadyToFinalize),
@@ -207,7 +207,8 @@ final class TransitionTableTests: XCTestCase {
         XCTAssertEqual(current.phase, .transferring)
 
         XCTAssertEqual(step(.authorityReported(emptyReport)),
-                       [.send(ResumePlan.derive(for: intent, given: .chunks([])).transfers, session)],
+                       [.send(ResumePlan.derive(for: intent, given: .chunks([])).transfers,
+                              session, after: .zero)],
                        "an authority holding nothing leaves the whole payload to send")
         XCTAssertEqual(current.phase, .transferring)
 
