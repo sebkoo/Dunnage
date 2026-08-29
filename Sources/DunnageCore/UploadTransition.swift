@@ -18,6 +18,12 @@ public enum RejectionReason: Hashable, Sendable {
     case notReadyToFinalize
     /// Every planned chunk is already confirmed; there is nothing left to transfer.
     case allChunksAlreadyConfirmed
+    /// The confirmation names a different upload. Evidence about one upload is not
+    /// evidence about another.
+    case confirmationForAnotherUpload
+    /// The confirmation names a different transport operation. Units are scoped to the
+    /// operation that stated them, so this is not evidence about the open one.
+    case confirmationFromAnotherTransportSession
     /// The phase is terminal. No event leaves it.
     case terminalPhaseIsAbsorbing
 }
@@ -97,9 +103,11 @@ public enum UploadTransition {
             return .accepted(state, [.askAuthorityForConfirmedProgress(intent.upload, session)])
 
         case (.transferring(let intent, let session, _), .authorityReported(let confirmation)):
-            return settle(intent: intent, session: session,
-                          progress: confirmation.progress,
-                          finalizeAlreadyRequested: false)
+            return admit(confirmation, for: intent, in: session) {
+                settle(intent: intent, session: session,
+                       progress: confirmation.progress,
+                       finalizeAlreadyRequested: false)
+            }
 
         case (.transferring, .finalized):
             return .rejected(.notReadyToFinalize)
@@ -119,9 +127,11 @@ public enum UploadTransition {
             return .rejected(.allChunksAlreadyConfirmed)
 
         case (.finalizing(let intent, let session, _), .authorityReported(let confirmation)):
-            return settle(intent: intent, session: session,
-                          progress: confirmation.progress,
-                          finalizeAlreadyRequested: true)
+            return admit(confirmation, for: intent, in: session) {
+                settle(intent: intent, session: session,
+                       progress: confirmation.progress,
+                       finalizeAlreadyRequested: true)
+            }
 
         case (.finalizing(let intent, _, _), .finalized):
             return .accepted(.completed(intent: intent), [])
@@ -134,6 +144,24 @@ public enum UploadTransition {
         case (.completed, _), (.failed, _):
             return .rejected(.terminalPhaseIsAbsorbing)
         }
+    }
+
+    /// Check a confirmation against the identity it claims before believing any of it.
+    ///
+    /// A confirmation names an upload and a transport operation. It is evidence about
+    /// those two things and nothing else, so one belonging to another upload or another
+    /// operation is never silently applied here.
+    private static func admit(_ confirmation: Confirmation,
+                              for intent: UploadIntent,
+                              in session: TransportSessionID,
+                              then apply: () -> TransitionOutcome) -> TransitionOutcome {
+        guard confirmation.upload == intent.upload else {
+            return .rejected(.confirmationForAnotherUpload)
+        }
+        guard confirmation.session == session else {
+            return .rejected(.confirmationFromAnotherTransportSession)
+        }
+        return apply()
     }
 
     /// Fold a fresh statement from the authority into the state.
