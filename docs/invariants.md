@@ -1,7 +1,9 @@
-# Phase 1, invariant by invariant
+# Invariant by invariant
 
-The named tests behind the nine invariants the `README.md` states. CI fails if this
-list and the suite disagree in either direction.
+The named tests behind the invariants `README.md` states. CI fails if this list and the
+suite disagree in either direction, and if a claim is worded differently in the two files.
+
+## Phase 1, invariant by invariant
 
 ### A chunk names a fixed span, and an authority's answer is read against that span
 
@@ -86,3 +88,25 @@ of these ever stops losing its work, the control has been broken.
 
 - `testWholeObjectTransportDouble_ResendsEveryByteAfterInterruption`
 - `testUnitHoldingAuthorityAfterTheSameInterruptionResendsOnlyWhatItNeverConfirmed`
+
+## Phase 2, invariant by invariant
+
+The durable ledger: a second implementation of `UploadEventLog`, backed by a file. See
+`docs/adr/0004-the-on-disk-ledger-and-what-an-unreadable-record-does.md`.
+
+### Every event has one written form on disk, and reading it back gives the event that was written
+
+The format is a decision, not a shape derived from how Core spells itself. The encoder
+switches over `UploadEvent` with no `default:`, so a new case in Core is a compile error
+until its written form is chosen.
+
+- `testEveryEventKindHasOneWrittenFormAndSurvivesTheRoundTrip`
+- `testTheWrittenFormOfAnEventIsPinnedByTheFormatAndNotBySwiftsSynthesis`
+
+### A record naming an event this binary does not know is never guessed at
+
+ADR-0001 O-1, decided by ADR-0004. Skipping it derives a state that is wrong and looks
+fine; refusing derives nothing. Worse for availability, better for the invariant.
+
+- `testARecordNamingAnEventThisBinaryDoesNotKnowIsNeverGuessedAt`
+- `testACompleteRecordThisBinaryCannotInterpretIsRefusedRatherThanRepaired`

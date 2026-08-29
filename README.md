@@ -48,7 +48,7 @@ named so that its absence is legible.
        executes Core's effects, owns the background URLSession,
        speaks S3 multipart against presigned URLs
    ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─
-     Durable ledger                              phase 2   not built
+     Durable ledger                              phase 2   in progress
        the append-only event log, on disk
    ┌────────────────────────────────────────────────────────────────┐
    │  DunnageCore — pure                         phase 1   landed   │
@@ -87,7 +87,7 @@ No percentages. A named invariant either exists or it does not.
 | Phase | What it proves | Status |
 |---|---|---|
 | **1. Core** | A chunk the transport authority has confirmed is never re-sent, under an identity and payload contract Core does not interpret, and no two ways of not being confirmed are treated as one. | landed — 39 named tests |
-| **2. Durable ledger** | The log outlives the process that wrote it: replaying it from disk reproduces state exactly. ADR-0001 O-1 is the open question here. | not started |
+| **2. Durable ledger** | The log outlives the process that wrote it: replaying it from disk reproduces state exactly, and a file that is not a log says so rather than deriving one. ADR-0001 O-1 was the open question here; ADR-0004 decides it. | in progress — 4 named tests |
 | **3. Driver and transport** | The bound holds against a real transport: after an interruption, redundant transfer is bounded by the chunks that were in flight and unconfirmed. | not started |
 | **4. Control plane and data plane** | The device never holds an AWS credential, the server derives object ownership from the authenticated principal, and `cdk synth` runs with no cloud credentials. | not started |
 | **5. App** | The invariant survives real lifecycle events. A simulated process death is not a SIGKILL, and phase 1 does not claim otherwise. | not started |
@@ -107,3 +107,11 @@ cloud configuration of any kind. The named tests behind them are in
 - Giving up is a decision, taken against a budget that says what an attempt is
 - The doubles keep the contracts they stand in for
 - The failure mode the thesis claims to remove, kept working on purpose
+
+## Phase 2, invariant by invariant
+
+The second implementation of `UploadEventLog`, on a file. The protocol did not change to
+suit it. The named tests are in [`docs/invariants.md`](docs/invariants.md).
+
+- Every event has one written form on disk, and reading it back gives the event that was written
+- A record naming an event this binary does not know is never guessed at
