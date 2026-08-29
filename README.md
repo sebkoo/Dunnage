@@ -1,5 +1,10 @@
 # Dunnage
 
+[![CI](https://github.com/sebkoo/Dunnage/actions/workflows/ci.yml/badge.svg)](https://github.com/sebkoo/Dunnage/actions/workflows/ci.yml)
+![Swift 6.0](https://img.shields.io/badge/Swift-6.0-orange.svg)
+![Platforms: iOS 17, macOS 14](https://img.shields.io/badge/platforms-iOS%2017%20%7C%20macOS%2014-lightgrey.svg)
+![License: Apache 2.0](https://img.shields.io/badge/license-Apache--2.0-blue.svg)
+
 Durable, resumable background uploads for iOS.
 
 A successful HTTP request is not the same thing as a durable upload.
