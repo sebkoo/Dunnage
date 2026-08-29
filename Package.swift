@@ -10,6 +10,6 @@ let package = Package(
     targets: [
         // Pure. No networking, no disk, no clock, no randomness.
         .target(name: "DunnageCore"),
-        .testTarget(name: "DunnageCoreTests", dependencies: ["DunnageCore"]),
+        .testTarget(name: "DunnageTests", dependencies: ["DunnageCore"]),
     ]
 )
