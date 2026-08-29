@@ -124,12 +124,15 @@ whatsoever about 3.
 - `testAuthorityReportsNonContiguousParts_ResumeSchedulesOnlyMissingParts`
 - `testOffsetShapedResumeSendsOnlyTheUnconfirmedSuffixOfAPartialChunk`
 
-### State is a total fold over an append-only log, and over nothing else
+### Every event resolves explicitly: a state and its effects, or a reason it changed nothing
 
 - `testTransitionTableIsTotal_EveryStateEventPairHasAnExplicitOutcome`
 - `testTerminalStateIsAbsorbing_EventAfterCompletionIsRejectedWithReason`
 - `testEffectSequenceForACleanUploadAsksBeforeItSends`
 - `testTransportReportingATransferCompleteDoesNotConfirmAnything`
+
+### State comes only from replaying the log, and a cold start finds everything it needs there
+
 - `testEventLogStoreAppendsMonotonicallyAndNeverAltersEarlierRecords`
 - `testEventLogSequencesAreScopedToOneUpload`
 - `testEventLogEnumeratesEveryUploadItHoldsAndIsEmptyForOnesItDoesNot`
@@ -168,13 +171,12 @@ so the fakes are tested too.
 - `testTransportDoubleThatForgotASessionCannotBeAskedAboutIt`
 - `testTransportDoubleRefusesToFinalizeAnIncompleteUpload`
 
-### The negative control, which is never fixed
+### The failure mode the thesis claims to remove, kept working on purpose
 
-The failure mode the thesis claims to remove, kept working. Interrupt a whole-object
-transport at 80% and every byte goes again; interrupt a unit-holding authority at the same
-point and only the four bytes it never confirmed do. The difference is the transport's
-contract, not the client's diligence — and if the first of these ever stops losing its
-work, the control has been broken.
+Interrupt a whole-object transport at 80% and every byte goes again; interrupt a
+unit-holding authority at the same point and only the four bytes it never confirmed do.
+The difference is the transport's contract, not the client's diligence — and if the first
+of these ever stops losing its work, the control has been broken.
 
 - `testWholeObjectTransportDouble_ResendsEveryByteAfterInterruption`
 - `testUnitHoldingAuthorityAfterTheSameInterruptionResendsOnlyWhatItNeverConfirmed`
