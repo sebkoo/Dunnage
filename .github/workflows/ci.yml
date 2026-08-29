@@ -30,21 +30,21 @@ jobs:
       - name: Build and test
         run: swift build && swift test
 
-      # A README that can drift from the suite is worse than a README that names no
-      # tests at all. Renaming a test breaks the build until the README is updated.
+      # A doc that can drift from the suite is worse than a doc that names no tests
+      # at all. Renaming a test breaks the build until docs/invariants.md is updated.
       # That is the point of this step, not a side effect of it.
       #
-      # It greps the whole file, not one section of it, so where in the README the
-      # names are written is free to change. What is enforced is that every name in
+      # It greps the whole file, not one section of it, so where in docs/invariants.md
+      # the names are written is free to change. What is enforced is that every name in
       # the suite appears somewhere in the file, and that nothing shaped like a test
       # name appears in the file which is not one.
-      - name: README names the tests that exist
+      - name: docs/invariants.md names the tests that exist
         run: |
           set -u
           names=$(swift test list | grep -oE 'test[A-Z][A-Za-z0-9_]*' | sort -u)
-          diff <(grep -oE 'test[A-Z][A-Za-z0-9_]*' README.md | sort -u) <(printf '%s\n' "$names") \
-            || { echo "::error::the README and the suite disagree — '<' is in the README only, '>' is in the suite only"; exit 1; }
-          echo "$(printf '%s\n' "$names" | wc -l) test names, README and suite agree"
+          diff <(grep -oE 'test[A-Z][A-Za-z0-9_]*' docs/invariants.md | sort -u) <(printf '%s\n' "$names") \
+            || { echo "::error::docs/invariants.md and the suite disagree — '<' is in the doc only, '>' is in the suite only"; exit 1; }
+          echo "$(printf '%s\n' "$names" | wc -l) test names, docs/invariants.md and the suite agree"
 
   commit-message-hygiene:
     name: commit message hygiene
