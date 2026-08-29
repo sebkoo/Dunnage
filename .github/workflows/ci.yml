@@ -1,0 +1,84 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# Two jobs rather than two steps in one. They need different machines and different
+# clones — Xcode against a shallow checkout, awk against the whole history — and they
+# assert unrelated things. A red suite must not hide a fabricated attribution, or the
+# reverse.
+jobs:
+  build-and-test:
+    name: build and test
+    # Pinned. macos-latest moves between macOS versions, and moving it silently changes
+    # the toolchain this job is supposed to be running against.
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Select the toolchain
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.6.app
+          swift --version          # Xcode 26.6 on this image: Swift 6.3.3
+
+      # No AWS credentials, no SSO session, no cloud config of any kind: that this passes is the architectural claim — Core is pure and needs none.
+      - name: Build and test
+        run: swift build && swift test
+
+  commit-message-hygiene:
+    name: commit message hygiene
+    # Pinned for the same reason. This job needs git and awk, nothing else.
+    runs-on: ubuntu-24.04
+    # The commit-msg hook cannot be the enforcement layer: rebase, cherry-pick and
+    # --no-verify all skip it, and a clone does not install it at all. This job is the
+    # layer that sees the history as pushed.
+    #
+    # It is a policy implementation, not an independent verifier. The classifier it runs
+    # is the copy in the commit under test, so a commit that edits .githooks/attribution.awk
+    # is judged by its own edited rules. Review changes to that file as production code.
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Every commit message means every commit message. A shallow clone would pass
+          # over a history it never fetched.
+          fetch-depth: 0
+
+      - name: Attribution trailers
+        run: |
+          set -u
+          checked=0; found=0
+          for sha in $(git rev-list HEAD); do
+            checked=$((checked + 1))
+            # attribution.awk is the one definition of a prohibited line form, and it
+            # reads trailer shapes, not prose. A body that names a vendor is not a claim
+            # of authorship; grepping the body would fail those commits.
+            git log -1 --format=%B "$sha" \
+              | LC_ALL=C awk -f .githooks/attribution.awk -v mode=detect -v label="$sha  " \
+              || found=1
+          done
+          echo "$checked commit messages classified"
+          [ "$found" -eq 0 ] || { echo "::error::prohibited attribution trailer, listed above"; exit 1; }
+
+      # Runs even when the step above failed, so one run reports both audits.
+      - name: Author and committer identity
+        if: ${{ !cancelled() }}
+        run: |
+          set -u
+          checked=0; found=0
+          for sha in $(git rev-list HEAD); do
+            checked=$((checked + 1))
+            identity=$(git log -1 --format='author %an <%ae> | committer %cn <%ce>' "$sha")
+            case "$(printf '%s' "$identity" | tr '[:upper:]' '[:lower:]')" in
+              *claude*|*anthropic.com*)
+                echo "$sha  $identity"
+                found=1
+                ;;
+            esac
+          done
+          echo "$checked author and committer identities checked"
+          [ "$found" -eq 0 ] || { echo "::error::commit recorded under a tooling identity, listed above"; exit 1; }
