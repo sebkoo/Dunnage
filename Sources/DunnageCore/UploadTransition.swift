@@ -157,3 +157,28 @@ public enum UploadTransition {
             finalizeAlreadyRequested ? [] : [.finalize(intent.upload, session)])
     }
 }
+
+extension UploadTransition {
+
+    /// Fold a recorded sequence into the state it produces.
+    ///
+    /// Effects are discarded. Replay reconstructs what is true, it does not re-perform what
+    /// was done; re-emitting effects here would re-send bytes on every cold start.
+    ///
+    /// A rejected event leaves the state untouched. The log records what happened, and that
+    /// includes events the machine had no rule for in the phase they arrived in — replay
+    /// has to be deterministic about those rather than pretend they were never written.
+    ///
+    /// `from` exists so that a prefix can be replayed once and continued later. Nothing
+    /// uses that yet; it is the property that would make a checkpoint cache legal, and it
+    /// is asserted rather than assumed.
+    public static func replay(_ events: [UploadEvent],
+                              from state: UploadMachineState = initialState) -> UploadMachineState {
+        events.reduce(state) { current, event in
+            switch apply(event, to: current) {
+            case .accepted(let next, _): next
+            case .rejected:              current
+            }
+        }
+    }
+}
