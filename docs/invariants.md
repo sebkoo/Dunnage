@@ -110,3 +110,17 @@ fine; refusing derives nothing. Worse for availability, better for the invariant
 
 - `testARecordNamingAnEventThisBinaryDoesNotKnowIsNeverGuessedAt`
 - `testACompleteRecordThisBinaryCannotInterpretIsRefusedRatherThanRepaired`
+- `testALedgerWrittenInAFormatThisBinaryDoesNotKnowIsRefusedRatherThanRead`
+
+### The state derived by replaying from disk is the state the writer held
+
+Every cold start here is a second `FileEventLog` over the same directory, which is all a new
+process would have. The same contract the in-memory double keeps, kept by the file too: a
+contract only one implementation is measured against describes that one.
+
+- `testStateReplayedFromDiskIsTheStateTheWriterHeld`
+- `testTheFileLedgerAppendsMonotonicallyAndNeverAltersEarlierRecords`
+- `testTheFileLedgerScopesSequencesToOneUpload`
+- `testTheFileLedgerEnumeratesEveryUploadItHoldsAndIsEmptyForOnesItDoesNot`
+- `testAnAbsentLedgerIsAColdStartWithNothingYetAndNotAnError`
+- `testUploadsThatACaseInsensitiveFilesystemCouldConfuseGetSeparateLedgers`
