@@ -30,6 +30,17 @@ jobs:
       - name: Build and test
         run: swift build && swift test
 
+      # A progress table that can drift from the suite is worse than no progress
+      # table. Renaming a test breaks the build until the README is updated. That
+      # is the point of this step, not a side effect of it.
+      - name: README progress table names the tests that exist
+        run: |
+          set -u
+          names=$(swift test list | grep -oE 'test[A-Z][A-Za-z0-9_]*' | sort -u)
+          diff <(grep -oE 'test[A-Z][A-Za-z0-9_]*' README.md | sort -u) <(printf '%s\n' "$names") \
+            || { echo "::error::the README progress table and the suite disagree — '<' is in the README only, '>' is in the suite only"; exit 1; }
+          echo "$(printf '%s\n' "$names" | wc -l) test names, README and suite agree"
+
   commit-message-hygiene:
     name: commit message hygiene
     # Pinned for the same reason. This job needs git and awk, nothing else.

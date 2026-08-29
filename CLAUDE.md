@@ -93,6 +93,8 @@ written against the weaker one, and the gap recorded in an ADR.
 - No automated tool-attribution trailers on public commits. Do not fabricate authorship,
   ownership, or provenance. Do not modify source or history to falsely claim human-only
   authorship.
+- The commit that completes a phase updates the progress table in `README.md` in the same
+  commit. A status that can drift from the repository is worse than no status.
 
 ## Done
 
