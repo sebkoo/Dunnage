@@ -96,7 +96,10 @@ payload := <length> bytes of UTF-8, a JSON object with sorted keys
 Version 1. One file per upload, so that `records(for:)` reads one file and one upload's
 writes never move another upload's bytes. The file is named by the lowercase hex of the
 upload identifier's UTF-8, and hex rather than base64url because APFS is case-insensitive
-by default: two identifiers whose base64url differs only in case would name one file.
+by default: two identifiers whose base64url differs only in case would name one file. An
+identifier whose name would not fit in a filename is refused rather than shortened or
+hashed, for the same reason: a name that does not distinguish two uploads puts them in one
+file, and arriving there by a length limit is no better than arriving there by case.
 
 **The sequence number is not stored.** It is the record's position in the file. Writing it
 down would create a second answer to a question that already has one, and then a rule for

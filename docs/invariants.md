@@ -111,6 +111,7 @@ fine; refusing derives nothing. Worse for availability, better for the invariant
 - `testARecordNamingAnEventThisBinaryDoesNotKnowIsNeverGuessedAt`
 - `testACompleteRecordThisBinaryCannotInterpretIsRefusedRatherThanRepaired`
 - `testALedgerWrittenInAFormatThisBinaryDoesNotKnowIsRefusedRatherThanRead`
+- `testAFileInTheLedgerDirectoryThisModuleDidNotWriteIsRefusedRatherThanIgnored`
 
 ### The state derived by replaying from disk is the state the writer held
 
@@ -124,6 +125,7 @@ contract only one implementation is measured against describes that one.
 - `testTheFileLedgerEnumeratesEveryUploadItHoldsAndIsEmptyForOnesItDoesNot`
 - `testAnAbsentLedgerIsAColdStartWithNothingYetAndNotAnError`
 - `testUploadsThatACaseInsensitiveFilesystemCouldConfuseGetSeparateLedgers`
+- `testAnUploadIdentifierTooLongToNameAFileIsRefusedRatherThanShortened`
 
 ### A torn tail is not an event, and replay stops before it rather than at it
 

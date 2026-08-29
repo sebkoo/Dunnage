@@ -89,7 +89,7 @@ No percentages. A named invariant either exists or it does not.
 | Phase | What it proves | Status |
 |---|---|---|
 | **1. Core** | A chunk the transport authority has confirmed is never re-sent, under an identity and payload contract Core does not interpret, and no two ways of not being confirmed are treated as one. | landed — 39 named tests |
-| **2. Durable ledger** | The log outlives the process that wrote it: replaying it from disk reproduces state exactly, and a file that is not a log says so rather than deriving one. ADR-0001 O-1 was the open question here; ADR-0004 decides it. | landed — 18 named tests |
+| **2. Durable ledger** | The log outlives the process that wrote it: replaying it from disk reproduces state exactly, and a file that is not a log says so rather than deriving one. ADR-0001 O-1 was the open question here; ADR-0004 decides it. | landed — 20 named tests |
 | **3. Driver and transport** | The bound holds against a real transport: after an interruption, redundant transfer is bounded by the chunks that were in flight and unconfirmed. | not started |
 | **4. Control plane and data plane** | The device never holds an AWS credential, the server derives object ownership from the authenticated principal, and `cdk synth` runs with no cloud credentials. | not started |
 | **5. App** | The invariant survives real lifecycle events. A simulated process death is not a SIGKILL, and phase 1 does not claim otherwise. | not started |

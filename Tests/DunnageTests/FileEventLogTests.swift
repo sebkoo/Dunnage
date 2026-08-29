@@ -133,6 +133,49 @@ final class FileEventLogTests: XCTestCase {
         }
     }
 
+    /// ADR-0004 O-7. Enumeration reads the directory, and a `.ledger` file this module did
+    /// not write is a file it cannot say anything about. Stepping over it would leave a cold
+    /// start enumerating some of what is outstanding and reporting that as all of it.
+    func testAFileInTheLedgerDirectoryThisModuleDidNotWriteIsRefusedRatherThanIgnored() async throws {
+        let directory = try temporaryDirectory()
+        let log = FileEventLog(directory: directory)
+        try await log.append([.declared(RecordedLogs.intent)], for: RecordedLogs.upload)
+
+        // Not hex, so not a name this module produces, whatever else it may be.
+        try Data().write(to: directory.appendingPathComponent("notes.ledger"))
+
+        var refusal: Error?
+        do { _ = try await log.uploads() } catch { refusal = error }
+        XCTAssertEqual(refusal as? LedgerError, .unrecognizedLedgerFile(name: "notes.ledger"),
+                       "a ledger file this module did not write was enumerated as if it had")
+
+        // A file that is not a ledger at all is not this module's business either way.
+        try FileManager.default.removeItem(at: directory.appendingPathComponent("notes.ledger"))
+        try Data().write(to: directory.appendingPathComponent("notes.txt"))
+        let found = try await log.uploads()
+        XCTAssertEqual(found, [RecordedLogs.upload],
+                       "a file that does not claim to be a ledger is not one")
+    }
+
+    /// The name is derived from the identifier and never shortened or hashed to fit.
+    /// Shortening two identifiers into one name would put two uploads in one file, which is
+    /// the failure the hex encoding exists to prevent, arriving by a different road.
+    func testAnUploadIdentifierTooLongToNameAFileIsRefusedRatherThanShortened() async throws {
+        let log = FileEventLog(directory: try temporaryDirectory())
+
+        let long = UploadID(String(repeating: "u", count: 100))
+        try await log.append([.declared(EventLogContract.intent(long))], for: long)
+        let held = try await log.records(for: long)
+        XCTAssertEqual(held.count, 1, "an identifier that fits is not the interesting case")
+
+        let tooLong = UploadID(String(repeating: "u", count: 200))
+        var refusal: Error?
+        do { _ = try await log.append([.declared(EventLogContract.intent(tooLong))], for: tooLong) }
+        catch { refusal = error }
+        XCTAssertEqual(refusal as? LedgerError, .uploadIdentifierTooLongForAFilename(tooLong),
+                       "an identifier that does not fit was written somewhere it does")
+    }
+
     // MARK: -
 
     private func onlyLedgerFile(in directory: URL) throws -> URL {
