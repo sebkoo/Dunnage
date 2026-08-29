@@ -16,6 +16,17 @@ actor InMemoryTransportDouble: UploadTransport {
         case offsetShaped
     }
 
+    /// Whether completed work survives a network interruption.
+    enum Durability: Sendable, Equatable {
+        /// Completed units outlive an interruption. A set-shaped authority holding parts,
+        /// and a server speaking a resumable upload protocol, both behave this way.
+        case retainsCompletedUnits
+        /// Nothing outlives an interruption. A single whole-object request behaves this
+        /// way: there is no unit smaller than the object, so an interrupted transfer
+        /// leaves the authority holding nothing it can confirm.
+        case retainsNothing
+    }
+
     /// What the double does with the next send for a chunk.
     enum Behavior: Sendable, Equatable {
         case succeed
@@ -34,6 +45,7 @@ actor InMemoryTransportDouble: UploadTransport {
     }
 
     let shape: AuthorityShape
+    let durability: Durability
 
     private var sessions: [TransportSessionID: Session] = [:]
     private var nextSession = 1
@@ -43,14 +55,27 @@ actor InMemoryTransportDouble: UploadTransport {
     /// Completion reports the transport has delivered, in order, duplicates included.
     private(set) var deliveredReports: [ChunkID] = []
 
-    init(shape: AuthorityShape) {
+    init(shape: AuthorityShape, durability: Durability = .retainsCompletedUnits) {
         self.shape = shape
+        self.durability = durability
     }
 
     // MARK: scripting
 
     func script(_ behavior: Behavior, for chunk: ChunkID) { behaviors[chunk] = behavior }
     func scriptEverything(_ behavior: Behavior) { defaultBehavior = behavior; behaviors = [:] }
+
+    /// A network interruption: the connection dropped mid-transfer.
+    ///
+    /// This models a dropped connection and nothing else. It is not process death, and no
+    /// test may be named or read as though it were.
+    func interrupt(_ session: TransportSessionID) {
+        guard durability == .retainsNothing, var state = sessions[session] else { return }
+        // No unit smaller than the object, so there is nothing partial left to hold.
+        state.units = []
+        state.spans = []
+        sessions[session] = state
+    }
 
     /// The authority loses all record of the operation, as an aborted multipart upload does.
     func forget(_ session: TransportSessionID) { sessions[session] = nil }
