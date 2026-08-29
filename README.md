@@ -30,8 +30,9 @@ a sum type rather than a number.
 
 See `docs/adr/0001-transport-boundary-and-confirmed-progress.md`,
 `docs/adr/0002-interruption-is-not-a-failure.md`,
-`docs/adr/0003-what-an-attempt-is-and-where-time-enters.md`, and
-`docs/adr/0004-the-on-disk-ledger-and-what-an-unreadable-record-does.md`.
+`docs/adr/0003-what-an-attempt-is-and-where-time-enters.md`,
+`docs/adr/0004-the-on-disk-ledger-and-what-an-unreadable-record-does.md`, and
+`docs/adr/0005-the-driver-and-the-clock-it-waits-behind.md`.
 
 ## Bird's-eye view
 
@@ -44,9 +45,13 @@ named so that its absence is legible.
      App                                         phase 5   not built
        choose a file, watch it finish
    ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─
-     Driver and transport                        phase 3   not built
-       executes Core's effects, owns the background URLSession,
-       speaks S3 multipart against presigned URLs
+     Transport                                   phase 4   not built
+       owns the background URLSession, speaks S3 multipart
+       against the presigned URLs the control plane issues
+   ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─
+     Driver                                      phase 3   not built
+       executes Core's effects, records what a transport answered,
+       and waits behind its own clock
    ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─
    ┌────────────────────────────────────────────────────────────────┐
    │  DunnageLedger                              phase 2   landed   │
@@ -90,8 +95,8 @@ No percentages. A named invariant either exists or it does not.
 |---|---|---|
 | **1. Core** | A chunk the transport authority has confirmed is never re-sent, under an identity and payload contract Core does not interpret, and no two ways of not being confirmed are treated as one. | landed — 39 named tests |
 | **2. Durable ledger** | The log outlives the process that wrote it: replaying it from disk reproduces state exactly, and a file that is not a log says so rather than deriving one. ADR-0001 O-1 was the open question here; ADR-0004 decides it. | landed — 21 named tests |
-| **3. Driver and transport** | The bound holds against a real transport: after an interruption, redundant transfer is bounded by the chunks that were in flight and unconfirmed. | not started |
-| **4. Control plane and data plane** | The device never holds an AWS credential, the server derives object ownership from the authenticated principal, and `cdk synth` runs with no cloud credentials. | not started |
+| **3. Driver** | The driver executes Core's effects and records what a transport answered, and concludes nothing of its own: a transfer it stopped waiting for is not a refusal, the attempt tally is not the driver's to keep, and an upload is given up on because Core asked for it. | not started |
+| **4. Transport, control plane and data plane** | The bound holds against a real transport: after an interruption, redundant transfer is bounded by the chunks that were in flight and unconfirmed. The device never holds an AWS credential, the server derives object ownership from the authenticated principal, and `cdk synth` runs with no cloud credentials. | not started |
 | **5. App** | The invariant survives real lifecycle events. A simulated process death is not a SIGKILL, and phase 1 does not claim otherwise. | not started |
 
 ## Phase 1, invariant by invariant
