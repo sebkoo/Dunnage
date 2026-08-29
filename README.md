@@ -93,19 +93,11 @@ No percentages. A named invariant either exists or it does not.
 
 ## Phase 1, invariant by invariant
 
-Every name below states its invariant rather than its method, which makes the list the
-shortest honest description of what this library refuses to do. They are written out for
-that reason, grouped by what they establish rather than by the file they live in.
-
 `swift test` runs all of them, with no AWS access key, no SSO session and no cloud
 configuration of any kind. CI fails if this list and the suite disagree in either
 direction.
 
 ### A chunk names a fixed span, and an authority's answer is read against that span
-
-A confirmation is meaningless if the bytes a chunk refers to can move underneath it, and
-an answer that named something outside the plan would widen a claim the authority never
-made.
 
 - `testChunkPlanPartitionsThePayloadExactlyOnce`
 - `testChunkPlanHasNoRangeForAnOrdinalOutsideThePlan`
@@ -116,9 +108,7 @@ made.
 ### A confirmation is evidence about the upload and the operation it names, and nothing else
 
 S3 part numbers are scoped to a multipart `uploadId`, so part 3 of one operation and part 3
-of another are unrelated facts. Applying one upload's answer to another would mark chunks
-confirmed that nobody ever confirmed — and the thesis would then decline to send them,
-forever.
+of another are unrelated facts.
 
 - `testConfirmationNamingAnotherUploadIsNeverApplied`
 - `testConfirmationFromAnotherTransportOperationIsNeverApplied`
@@ -126,9 +116,8 @@ forever.
 
 ### A chunk the authority has confirmed is never handed to a transport again
 
-The thesis itself, under both confirmation shapes, because it is not allowed to depend on
-which contract is in play. A set-shaped authority reports a set and not a frontier: holding
-1, 2 and 4 says nothing whatsoever about 3.
+A set-shaped authority reports a set and not a frontier: holding 1, 2 and 4 says nothing
+whatsoever about 3.
 
 - `testAuthorityConfirmedChunk_IsNeverRescheduled`
 - `testAnUploadWithNoAuthorityReportYetSchedulesEveryChunk`
@@ -136,10 +125,6 @@ which contract is in play. A set-shaped authority reports a set and not a fronti
 - `testOffsetShapedResumeSendsOnlyTheUnconfirmedSuffixOfAPartialChunk`
 
 ### State is a total fold over an append-only log, and over nothing else
-
-Every (state, event) pair resolves explicitly, terminal states absorb, and a cold start that
-replays from nothing lands where the running process stood. A transport saying "that
-transfer finished" moves none of it: Core records the observation and goes and asks.
 
 - `testTransitionTableIsTotal_EveryStateEventPairHasAnExplicitOutcome`
 - `testTerminalStateIsAbsorbing_EventAfterCompletionIsRejectedWithReason`
@@ -152,10 +137,7 @@ transfer finished" moves none of it: Core records the observation and goes and a
 
 ### An interruption is not a failure, and a duplicate is not progress
 
-A chunk in flight when the connection drops is unconfirmed — it may have landed and it may
-not, and only the authority can say. A confirmation that arrives twice is on the log twice,
-because the log is append-only, and folding it twice has to derive what folding it once
-derives. See `docs/adr/0002-interruption-is-not-a-failure.md`.
+See `docs/adr/0002-interruption-is-not-a-failure.md`.
 
 - `testNetworkInterruptionMidChunk_LeavesTheChunkUnconfirmedNotFailed`
 - `testDuplicateConfirmation_IsIdempotentUnderReplay`
@@ -163,10 +145,7 @@ derives. See `docs/adr/0002-interruption-is-not-a-failure.md`.
 
 ### Giving up is a decision, taken against a budget that says what an attempt is
 
-`.failed` is terminal and absorbing, so nothing may drift into it. An attempt is a refusal;
-an interruption is not one, or a flaky network would exhaust the budget of chunks that were
-never in trouble. An upload that gave up keeps what the authority had confirmed. See
-`docs/adr/0003-what-an-attempt-is-and-where-time-enters.md`.
+See `docs/adr/0003-what-an-attempt-is-and-where-time-enters.md`.
 
 - `testRetryExhaustion_IsADecisionThatPreservesConfirmedProgress`
 - `testInterruptionsNeverSpendTheRetryBudgetHoweverManyArrive`
@@ -178,8 +157,7 @@ never in trouble. An upload that gave up keeps what the authority had confirmed.
 ### The doubles keep the contracts they stand in for
 
 A fake that quietly disagrees with the protocol makes every test standing on it worthless,
-so the fakes are tested too. This one models both authority shapes, because choosing one
-would bake that choice into everything above.
+so the fakes are tested too.
 
 - `testTransportDoubleIssuesDistinctSessionsAndRefusesUnknownOnes`
 - `testTransportDoubleReportsSetShapedProgressIncludingGaps`
