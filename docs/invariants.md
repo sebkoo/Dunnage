@@ -135,3 +135,21 @@ honesty boundary in ADR-0004.
 - `testAppendingAfterATornTailReplacesTheTornBytesRatherThanWritingPastThem`
 - `testTornUnknownAndAbsentAreThreeAnswersAndNeverOne`
 - `testBytesThatWereAllThereAreNotATearAndAreRefusedRatherThanTrimmed`
+
+### The failure mode a completeness marker removes, kept working on purpose
+
+Two bytes short of finishing one write. A ledger with no completeness marker reads
+`chunks 11 12 13` as `chunks 11 12 1`, because a truncated ordinal is a perfectly good
+ordinal and nothing in the file says the record never finished — so chunk 1 is dropped from
+the plan and never sent, and no authority ever said it holds it. The framed ledger, given
+the same cut write, derives that the authority never answered. The difference is the marker,
+not the diligence of the reader, and the marker-less ledger keeps the same protocol
+contract to prove it.
+
+Phase 1's control is a different failure: bytes re-sent that were confirmed. This one is the
+thesis failing from the other end, bytes skipped that were not. If the marker-less ledger
+ever stops losing this, the control has been broken.
+
+- `testTheMarkerlessLedgerKeepsTheContractItIsMeasuredAgainst`
+- `testALedgerWithNoCompletenessMarkerDerivesProgressNobodyConfirmed`
+- `testTheFramedLedgerAfterTheSameTornWriteDerivesOnlyWhatWasDurablyRecorded`
