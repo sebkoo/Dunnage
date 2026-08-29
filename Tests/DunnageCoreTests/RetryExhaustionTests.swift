@@ -179,16 +179,6 @@ final class RetryExhaustionTests: XCTestCase {
         XCTAssertEqual(policy.backoff(beforeAttempt: 6), .seconds(4), "capped, not doubling forever")
         XCTAssertEqual(policy.backoff(beforeAttempt: 60), .seconds(4))
 
-        // The cap clamps even when doubling steps straight over it, which a cap that
-        // happens to be a doubling of the first wait never shows.
-        let overshooting = RetryPolicy(maxAttemptsPerChunk: 9,
-                                       initialBackoff: .milliseconds(500),
-                                       maximumBackoff: .seconds(3))
-        XCTAssertEqual(overshooting.backoff(beforeAttempt: 4), .seconds(2))
-        XCTAssertEqual(overshooting.backoff(beforeAttempt: 5), .seconds(3),
-                       "the wait after two seconds is three, not four")
-        XCTAssertEqual(overshooting.backoff(beforeAttempt: 9), .seconds(3))
-
         // And what the machine hands over is that same value, for the attempt the send is.
         let intent = self.intent
         let session = TransportSessionID("session-1")
@@ -212,6 +202,26 @@ final class RetryExhaustionTests: XCTestCase {
             XCTAssertEqual(wait, policy.backoff(beforeAttempt: attempt),
                            "attempt \(attempt): the send must carry the wait its attempt earned")
         }
+    }
+
+    /// The cap clamps a wait that doubling steps straight over, and not only one that
+    /// doubling lands on.
+    ///
+    /// This upload's own policy caps at four seconds, which is exactly where doubling from
+    /// half a second arrives, so under it the clamp is never the thing that stops the
+    /// growth — the loop's own guard is. A cap of three seconds is stepped over rather
+    /// than reached, and only then does the clamp have to do anything.
+    func testBackoffClampsWhenDoublingStepsOverTheCap() {
+        let overshooting = RetryPolicy(maxAttemptsPerChunk: 9,
+                                       initialBackoff: .milliseconds(500),
+                                       maximumBackoff: .seconds(3))
+
+        XCTAssertEqual(overshooting.backoff(beforeAttempt: 4), .seconds(2),
+                       "two seconds is still under the cap and is waited in full")
+        XCTAssertEqual(overshooting.backoff(beforeAttempt: 5), .seconds(3),
+                       "the wait after two seconds is three, not the four doubling asks for")
+        XCTAssertEqual(overshooting.backoff(beforeAttempt: 9), .seconds(3),
+                       "and it stays there")
     }
 
     /// A transport can deliver the same refusal twice, and the log cannot tell that apart
