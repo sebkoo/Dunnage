@@ -138,6 +138,20 @@ honesty boundary in ADR-0004.
 - `testTornUnknownAndAbsentAreThreeAnswersAndNeverOne`
 - `testBytesThatWereAllThereAreNotATearAndAreRefusedRatherThanTrimmed`
 
+### Two uploads are never one ledger, however late in their identifiers they differ
+
+The other link in the chain the naming rules stand on. The claim above asserts the
+mechanisms — hex rather than base64url, and a refusal rather than a shortened name. This
+asserts what those mechanisms are for, without depending on either of them being the way it
+is reached: a scheme that shortened a name to fit would break this, and a collision-free
+scheme that was not a refusal would break neither.
+
+The two halves are different situations. Names that fit give two ledgers and `uploads()`
+reports two. Names that do not fit are refused, so there are none — which is why the
+assertion there is that there is never *one*, and not that there are always two.
+
+- `testTwoUploadsThatDifferOnlyLateInTheirIdentifiersAreNeverOneLedger`
+
 ### The failure mode a completeness marker removes, kept working on purpose
 
 Two bytes short of finishing one write. A ledger with no completeness marker reads

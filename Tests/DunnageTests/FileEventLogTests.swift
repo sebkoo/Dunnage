@@ -176,7 +176,62 @@ final class FileEventLogTests: XCTestCase {
                        "an identifier that does not fit was written somewhere it does")
     }
 
+    /// The other link in the chain the refusal above stands on.
+    ///
+    /// That test asserts the refusal exists. This one asserts the thing the refusal is for,
+    /// without depending on it being a refusal: two uploads are two ledgers, and neither of
+    /// them ever replays the other's events. A ledger that shortened a name to fit would
+    /// satisfy the mechanism's absence and break this; one that found some other collision-
+    /// free naming would break neither.
+    ///
+    /// The two halves are different situations on purpose. Names that fit produce two
+    /// ledgers and `uploads()` reports two. Names that do not fit are refused, so there are
+    /// none — which is why the assertion there is that there is never *one*, and not that
+    /// there are always two.
+    func testTwoUploadsThatDifferOnlyLateInTheirIdentifiersAreNeverOneLedger() async throws {
+        let fitting = try temporaryDirectory()
+        let fits = FileEventLog(directory: fitting)
+        let shortA = UploadID(String(repeating: "u", count: 100) + "-a")
+        let shortB = UploadID(String(repeating: "u", count: 100) + "-bb")
+        try await fits.append([.declared(EventLogContract.intent(shortA))], for: shortA)
+        try await fits.append([.declared(EventLogContract.intent(shortB))], for: shortB)
+
+        let forShortA = try await fits.records(for: shortA)
+        let forShortB = try await fits.records(for: shortB)
+        XCTAssertEqual(forShortA.map(\.event), [.declared(EventLogContract.intent(shortA))],
+                       "a ledger replayed events that belong to another upload")
+        XCTAssertEqual(forShortB.map(\.event), [.declared(EventLogContract.intent(shortB))],
+                       "a ledger replayed events that belong to another upload")
+        let enumerated = try await fits.uploads()
+        XCTAssertEqual(Set(enumerated), [shortA, shortB], "two uploads, two ledgers")
+        XCTAssertEqual(try ledgerFiles(in: fitting).count, 2, "and two files holding them")
+
+        // Identical until well past the byte at which a name shortened to fit would end.
+        // Whether the ledger accepts these is the mechanism's business and is asserted
+        // elsewhere; that they are two uploads and not one is not negotiable either way.
+        let folding = try temporaryDirectory()
+        let folds = FileEventLog(directory: folding)
+        let longA = UploadID(String(repeating: "u", count: 200) + "-a")
+        let longB = UploadID(String(repeating: "u", count: 200) + "-bb")
+        _ = try? await folds.append([.declared(EventLogContract.intent(longA))], for: longA)
+        _ = try? await folds.append([.declared(EventLogContract.intent(longB))], for: longB)
+
+        XCTAssertNotEqual(try ledgerFiles(in: folding).count, 1,
+                          "two uploads whose names differ only past the end of a shortened one share a ledger")
+        let readA = (try? await folds.records(for: longA)) ?? []
+        let readB = (try? await folds.records(for: longB)) ?? []
+        XCTAssertFalse(readA.map(\.event).contains(.declared(EventLogContract.intent(longB))),
+                       "one upload replayed another upload's declaration")
+        XCTAssertFalse(readB.map(\.event).contains(.declared(EventLogContract.intent(longA))),
+                       "one upload replayed another upload's declaration")
+    }
+
     // MARK: -
+
+    private func ledgerFiles(in directory: URL) throws -> [String] {
+        try FileManager.default.contentsOfDirectory(atPath: directory.path)
+            .filter { $0.hasSuffix(".ledger") }
+    }
 
     private func onlyLedgerFile(in directory: URL) throws -> URL {
         let names = try FileManager.default.contentsOfDirectory(atPath: directory.path)
