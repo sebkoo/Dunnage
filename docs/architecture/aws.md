@@ -121,29 +121,3 @@ ADR에 한 줄로 박아두세요: **The server derives object ownership from th
 **"③이 왜 서버를 안 거치나"** — Lambda가 바이트를 못 받는 게 아닙니다. **받을 수 있지만 일부러 안 씁니다.** control plane과 data plane의 분리가 1차 이유고, Lambda는 업로드를 조율하되 바이트는 나르지 않습니다. 부차적으로 Lambda 실행 시간·메모리·비용·처리량이 붙고, 최대 실행 시간이 900초라는 상한도 있습니다 — 하지만 그건 결론이지 이유가 아닙니다.
 
 **"기기가 직접 재개 상태를 조회하면 되지 않나"** — S3가 막는 게 아니라 **이 설계가 그렇게 두지 않습니다.** `ListParts` 는 `s3:ListMultipartUploadParts` 권한을 요구하는 별도의 S3 API 호출이고, 파트별 presigned PUT URL 자체는 그 호출을 인가하는 수단이 아닙니다. 그 권한은 control plane에 두고 기기는 백엔드가 주는 progress view를 씁니다. 적절한 자격증명을 가진 클라이언트라면 호출할 수 있다는 점은 인정하고, 그렇게 두지 않기로 한 이유를 말하는 편이 낫습니다.
-
-## 면접에서 나오는 질문 — 한 줄 답
-
-각 질문에 한 줄로 답할 수 있으면 이 JD 기준으로는 충분합니다.
-
-| 질문 | 핵심 한 줄 |
-|---|---|
-| Cognito User Pool과 Identity Pool 차이는? | User Pool은 사용자 명부라 JWT를 주고, Identity Pool은 그 JWT를 AWS 임시 자격증명으로 바꿔줍니다 |
-| 모바일 앱에 AWS 액세스 키를 넣으면 왜 안 되나? | 앱 바이너리는 뜯을 수 있고, 키에는 만료가 없으며, 서버가 그 키로 뭘 하는지 통제할 수 없습니다 |
-| API Gateway REST API vs HTTP API? | HTTP API가 싸고 빠릅니다. 요청/응답 변환이나 사용량 계획이 필요할 때만 REST API |
-| JWT authorizer vs Lambda authorizer? | Cognito 토큰 검증으로 충분하면 HTTP API의 내장 JWT authorizer를 씁니다. 요청별 커스텀 인가 로직이 필요할 때 Lambda authorizer를 검토하고, 그만큼 지연시간과 비용이 붙습니다 |
-| presigned URL은 언제 만료되나? | 지정한 만료 시각과 **서명한 자격증명의 만료** 중 먼저 오는 쪽. Lambda 역할로 서명하면 역할 세션 만료에 묶입니다 |
-| 백그라운드 URLSession이면 업로드가 이어서 재개되나? | 백그라운드 세션이 주는 건 **스케줄·실행의 지속성**입니다. 서버가 URLSession이 쓰는 IETF HTTP resumable upload 프로토콜에 참여하지 않으면 URLSession은 그 서버에 대해 **바이트 단위 재개를 제공하지 못합니다.** 그러면 복구는 트랜스포트 계약이 정하는 방식을 따르고, 전체 재전송이 될 수도 있습니다 (tus 진영 클라이언트의 관찰: *"By default, iOS will retry the full upload instead of resuming where the upload has left off."*) |
-| 그럼 S3에서는 어떻게 재개하나? | multipart. 재개 기준은 오프셋이 아니라 `ListParts`가 돌려주는 파트 **집합**입니다. 오프셋은 클라이언트가 고정 파티션을 정했을 때만 유도되는 값입니다 |
-| 기기가 `ListParts`를 직접 호출하면 되지 않나? | **기술적으로는 가능합니다** — `s3:ListMultipartUploadParts` 권한을 가진 주체라면. **이 설계에서는 하지 않습니다.** 클라이언트에 그 권한을 주지 않고 control plane이 progress view를 제공합니다. 파트별 presigned PUT URL 자체는 그 호출을 인가하는 수단이 아닙니다 |
-| S3가 업로드 원장 아닌가? | 어느 파트를 갖고 있는지에 대한 권위일 뿐입니다. `CompleteMultipartUpload`는 클라이언트가 보관한 파트 번호와 ETag 목록을 요구하므로, 애플리케이션 원장은 별개입니다 |
-| 왜 파일을 서버로 안 보내고 S3에 직접 올리나? | Lambda를 통과시키면 파일 크기만큼 실행 시간·메모리 비용이 붙고 15분 제한에 걸립니다 |
-| DynamoDB 파티션 키는 어떻게 정하나? | 조회 패턴을 먼저 정하고 거기서 역산합니다. 접근이 한 키에 몰리면 핫 파티션이 됩니다 |
-| GSI는 언제 필요한가? | 기본 키가 아닌 다른 순서로 조회해야 할 때. 예: "내 것 중 최근 갱신순" |
-| single table design이 뭔가? | 여러 엔터티를 한 테이블에 넣고 키 접두어로 구분하는 방식. 조인이 없는 대신 조회 패턴이 고정됩니다 |
-| Lambda 콜드 스타트는 어떻게 줄이나? | 패키지 크기 축소, arm64, 필요하면 provisioned concurrency. 다만 모바일 업로드 발급 경로에서는 대개 문제가 안 됩니다 |
-| 업로드 재시도에서 중복은 어떻게 막나? | 클라이언트가 생성한 UUID를 멱등성 키로 쓰고, 서버는 조건부 쓰기로 같은 키를 두 번 반영하지 않습니다 |
-| 액세스 토큰이 만료되면 클라이언트가 뭘 하나? | 401을 받으면 refresh flow로 새 액세스 토큰을 받고, 원래 요청을 **안전한 범위에서** 한 번 재시도합니다. 갱신도 실패하면 재로그인. 동시 갱신 레이스는 갱신을 actor 하나 뒤로 직렬화해서 막습니다 |
-
----
-
