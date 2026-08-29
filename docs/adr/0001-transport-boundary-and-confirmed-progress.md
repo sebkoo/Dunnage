@@ -169,6 +169,12 @@ Core, and is recorded here so the constraint is not rediscovered later.
 
 ### O-1. How does a stored event log survive a binary that has since gained enum cases?
 
+**Decided by ADR-0004.** The paragraphs below record why it was left open, and the
+condition they name has since been met: the on-disk format exists. A complete record naming
+an event the reading binary does not have refuses the whole replay rather than being
+skipped. No version field was added to `UploadEvent`; the version lives in the ledger's file
+header, where the format it versions is.
+
 The log outlives the process that wrote it. Events are never rewritten. The transition
 table's totality is checked against *today's* cases. A future build that decodes a log
 containing a case it does not know, or an older build decoding a log written by a newer one,

@@ -28,9 +28,10 @@ Core does not know whether confirmed progress is a contiguous byte offset or a s
 confirmed units. That meaning belongs to the transport contract, which is why the type is
 a sum type rather than a number.
 
-See `docs/adr/0001-transport-boundary-and-confirmed-progress.md` and
-`docs/adr/0002-interruption-is-not-a-failure.md`, and
-`docs/adr/0003-what-an-attempt-is-and-where-time-enters.md`.
+See `docs/adr/0001-transport-boundary-and-confirmed-progress.md`,
+`docs/adr/0002-interruption-is-not-a-failure.md`,
+`docs/adr/0003-what-an-attempt-is-and-where-time-enters.md`, and
+`docs/adr/0004-the-on-disk-ledger-and-what-an-unreadable-record-does.md`.
 
 ## Bird's-eye view
 
