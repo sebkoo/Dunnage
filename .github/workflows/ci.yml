@@ -46,6 +46,38 @@ jobs:
             || { echo "::error::docs/invariants.md and the suite disagree — '<' is in the doc only, '>' is in the suite only"; exit 1; }
           echo "$(printf '%s\n' "$names" | wc -l) test names, docs/invariants.md and the suite agree"
 
+      # Both files state the nine claims, and that duplication is deliberate: each has
+      # to be readable on its own, and the claims are what makes either one readable.
+      # Nothing else reconciles the two copies — the step above reads only
+      # docs/invariants.md, so a claim reworded in one file and not the other clears
+      # every other check in this workflow.
+      #
+      # Compared in order, not as sets. The nine are a deliberate sequence, and a
+      # reader holding the two files side by side should not have to hunt.
+      #
+      # The count guard is the substance of this step, not paperwork around it. Each
+      # side is extracted by pattern — a list marker here, a heading level there — and
+      # a pattern that stops matching returns an empty list, not an error. A renamed
+      # section or a changed heading level would empty one side; two empty lists diff
+      # clean, and the step would pass green forever while reading nothing. A tenth
+      # invariant is a deliberate act: land it, then change this 9.
+      - name: README and docs/invariants.md state the same nine claims
+        run: |
+          set -u
+          expected=9
+          readme=$(mktemp); doc=$(mktemp)
+          sed -n '/^## Phase 1/,/^## /p' README.md | sed -n 's/^- //p' > "$readme"
+          sed -n 's/^### //p' docs/invariants.md > "$doc"
+          rn=$(wc -l < "$readme" | tr -d '[:space:]')
+          dn=$(wc -l < "$doc" | tr -d '[:space:]')
+          [ "$rn" -eq "$expected" ] && [ "$dn" -eq "$expected" ] || {
+            echo "::error::the claim extraction is broken, so this step read nothing it could compare — expected $expected claims on each side, README.md gave $rn and docs/invariants.md gave $dn"
+            exit 1
+          }
+          diff "$readme" "$doc" \
+            || { echo "::error::the nine claims disagree — '<' is in README.md only, '>' is in docs/invariants.md only"; exit 1; }
+          echo "$expected claims, README.md and docs/invariants.md agree, in the same order"
+
   commit-message-hygiene:
     name: commit message hygiene
     # Pinned for the same reason. This job needs git and awk, nothing else.
