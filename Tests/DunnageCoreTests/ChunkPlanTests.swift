@@ -17,7 +17,8 @@ final class ChunkPlanTests: XCTestCase {
                 var cursor = 0
                 for chunk in plan.chunks {
                     guard let range = plan.range(of: chunk) else {
-                        return XCTFail("\(context): \(chunk) is in the plan but has no range")
+                        XCTFail("\(context): \(chunk) is in the plan but has no range")
+                        continue
                     }
                     XCTAssertEqual(range.start.value, cursor,
                                    "\(context): \(chunk) does not start where the previous chunk ended")

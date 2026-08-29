@@ -82,7 +82,8 @@ final class InterruptionTests: XCTestCase {
                 &state, context)
 
             guard case .send(let transfers, _, _)? = scheduled.first else {
-                return XCTFail("\(context): the authority's answer must schedule the rest")
+                XCTFail("\(context): the authority's answer must schedule the rest")
+                continue
             }
             XCTAssertEqual(transfers.map(\.chunk),
                            landed ? [ChunkID(4), ChunkID(5)]

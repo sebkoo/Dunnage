@@ -205,7 +205,8 @@ final class RetryExhaustionTests: XCTestCase {
             guard case .accepted(_, let effects) =
                     UploadTransition.apply(.authorityReported(nothing), to: state),
                   case .send(_, _, let wait)? = effects.first else {
-                return XCTFail("attempt \(attempt): the outstanding chunks are still outstanding")
+                XCTFail("attempt \(attempt): the outstanding chunks are still outstanding")
+                continue
             }
             state = UploadTransition.replay(log)
             XCTAssertEqual(wait, policy.backoff(beforeAttempt: attempt),
