@@ -124,3 +124,14 @@ contract only one implementation is measured against describes that one.
 - `testTheFileLedgerEnumeratesEveryUploadItHoldsAndIsEmptyForOnesItDoesNot`
 - `testAnAbsentLedgerIsAColdStartWithNothingYetAndNotAnError`
 - `testUploadsThatACaseInsensitiveFilesystemCouldConfuseGetSeparateLedgers`
+
+### A torn tail is not an event, and replay stops before it rather than at it
+
+Every file behind these is constructed byte by byte. None of them is evidence about a
+process death: that is a lifecycle claim and it belongs to the device harness. See the
+honesty boundary in ADR-0004.
+
+- `testATornTailIsNotAnEventAndReplayStopsBeforeIt`
+- `testAppendingAfterATornTailReplacesTheTornBytesRatherThanWritingPastThem`
+- `testTornUnknownAndAbsentAreThreeAnswersAndNeverOne`
+- `testBytesThatWereAllThereAreNotATearAndAreRefusedRatherThanTrimmed`

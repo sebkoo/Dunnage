@@ -84,7 +84,7 @@ jobs:
             echo "phase $phase: $expected claims, README.md and docs/invariants.md agree, in the same order"
           }
           check 1 9
-          check 2 3
+          check 2 4
           exit $failed
 
   commit-message-hygiene:

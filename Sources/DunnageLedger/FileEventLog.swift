@@ -30,27 +30,32 @@ public actor FileEventLog: UploadEventLog {
         // to know what is already there — and a log this binary cannot read is one it must
         // not append to, because the events it would write are derived from a state it
         // cannot derive.
-        let existing: [EventRecord]
+        let existing: LedgerFile.Reading
         if files.fileExists(atPath: file.path) {
             existing = try LedgerFile.read([UInt8](try Data(contentsOf: file)), of: upload)
         } else {
             guard files.createFile(atPath: file.path, contents: Data(LedgerFile.header)) else {
                 throw LedgerError.couldNotCreateLedger(upload)
             }
-            existing = []
+            existing = LedgerFile.Reading(records: [], completeBytes: LedgerFile.header.count)
         }
 
         var bytes: [UInt8] = []
         var appended: [EventRecord] = []
         for (offset, event) in events.enumerated() {
             bytes.append(contentsOf: try LedgerFile.framed(event))
-            appended.append(EventRecord(sequence: LogSequence(existing.count + offset + 1),
+            appended.append(EventRecord(sequence: LogSequence(existing.records.count + offset + 1),
                                         event: event))
         }
 
         let handle = try FileHandle(forWritingTo: file)
         defer { try? handle.close() }
-        try handle.seekToEnd()
+        // Truncating to the end of the last whole record is the writer's half of the same
+        // decision the reader makes. The only bytes it ever removes are bytes that are not
+        // a record; writing past them instead would leave them in the middle of the file,
+        // where a reader that stops at the first incomplete frame reaches nothing after
+        // them. No event is dropped here, because no event was ever there.
+        try handle.truncate(atOffset: UInt64(existing.completeBytes))
         try handle.write(contentsOf: Data(bytes))
         // The strongest durability action available from user space, and the reason this
         // phase exists. That it survives a power loss is a claim about the device, and no
@@ -63,7 +68,7 @@ public actor FileEventLog: UploadEventLog {
     public func records(for upload: UploadID) throws -> [EventRecord] {
         let file = try url(for: upload)
         guard files.fileExists(atPath: file.path) else { return [] }
-        return try LedgerFile.read([UInt8](try Data(contentsOf: file)), of: upload)
+        return try LedgerFile.read([UInt8](try Data(contentsOf: file)), of: upload).records
     }
 
     public func uploads() throws -> [UploadID] {

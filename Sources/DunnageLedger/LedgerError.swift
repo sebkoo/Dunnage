@@ -29,11 +29,9 @@ public enum LedgerError: Error, Hashable, Sendable {
     case unsupportedFormatVersion(Int)
 
     /// A frame that is present and is not a frame. Distinct from a record that ends before
-    /// it is whole: the bytes were there, so nothing was truncated here.
+    /// it is whole, which is not an error at all: there the bytes ran out, and here they
+    /// did not.
     case malformedFrame(atByteOffset: Int)
-
-    /// A record ends before it is whole.
-    case incompleteRecord(atByteOffset: Int)
 
     /// The frame was whole and the payload could not be read.
     case unreadableRecord(upload: UploadID, sequence: LogSequence, fault: RecordFault)

@@ -29,18 +29,37 @@ enum LedgerFile {
         return Array("\(payload.count) ".utf8) + payload + [newline]
     }
 
-    /// Every record in `bytes`, in file order.
+    /// What a file holds.
+    struct Reading {
+        /// The records that are whole, in file order.
+        let records: [EventRecord]
+
+        /// Where the last whole record ends. Anything after it is not a record — a write
+        /// that did not finish — and is the writer's to replace rather than to append past.
+        let completeBytes: Int
+    }
+
+    /// Every whole record in `bytes`, in file order, and where they end.
+    ///
+    /// Reading stops *before* the first record that is not whole, not at it. The bytes end
+    /// in the middle of an event, so no event was recorded there, and deriving one from
+    /// them would claim progress nothing confirmed.
     ///
     /// Sequences are the records' positions. They are not written down: a stored sequence
     /// would be a second answer to a question that already has one, and then a rule for
     /// what to do when the two disagree.
-    static func read(_ bytes: [UInt8], of upload: UploadID) throws -> [EventRecord] {
-        var position = try endOfHeader(bytes)
+    static func read(_ bytes: [UInt8], of upload: UploadID) throws -> Reading {
+        // A header that has not finished being written is a file with no whole record in
+        // it. There is nothing to read and nothing to keep.
+        guard var position = try endOfHeader(bytes) else {
+            return Reading(records: [], completeBytes: 0)
+        }
         var records: [EventRecord] = []
+        var complete = position
 
         while position < bytes.count {
             guard let space = bytes[position...].firstIndex(of: space) else {
-                throw LedgerError.incompleteRecord(atByteOffset: position)
+                break                                   // the length is not all there yet
             }
             guard let length = decimal(bytes[position..<space]), length <= largestPayload else {
                 throw LedgerError.malformedFrame(atByteOffset: position)
@@ -48,7 +67,7 @@ enum LedgerFile {
             let start = space + 1
             let end = start + length
             guard end < bytes.count else {
-                throw LedgerError.incompleteRecord(atByteOffset: position)
+                break                                   // the payload, or its terminator, is not
             }
             // The payload's bytes were all there and the terminator is not. Nothing
             // truncated this, so it is not a tear.
@@ -64,14 +83,14 @@ enum LedgerFile {
                 throw LedgerError.unreadableRecord(upload: upload, sequence: sequence, fault: fault)
             }
             position = end + 1
+            complete = position
         }
-        return records
+        return Reading(records: records, completeBytes: complete)
     }
 
-    private static func endOfHeader(_ bytes: [UInt8]) throws -> Int {
-        guard let end = bytes.firstIndex(of: newline) else {
-            throw LedgerError.incompleteRecord(atByteOffset: 0)
-        }
+    /// `nil` when the header itself is not all there.
+    private static func endOfHeader(_ bytes: [UInt8]) throws -> Int? {
+        guard let end = bytes.firstIndex(of: newline) else { return nil }
         let line = String(decoding: bytes[..<end], as: UTF8.self)
         guard line.hasPrefix(prefix), let version = Int(line.dropFirst(prefix.count)) else {
             throw LedgerError.unrecognizedFormat(header: line)
