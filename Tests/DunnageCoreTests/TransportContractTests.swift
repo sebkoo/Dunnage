@@ -63,34 +63,49 @@ final class TransportContractTests: XCTestCase {
                        "the prefix stops at the gap, whatever else the authority is holding")
     }
 
-    func testTransportDoubleScriptedToFailStoresNothingForThatChunk() async throws {
+    /// A refusal is an answer, and a negative one: nothing landed, and the transport is in
+    /// a position to say so. It is a different statement from an interruption, and the
+    /// call site can tell the two apart.
+    func testTransportDoubleScriptedToRefuseAnswersNoAndStoresNothing() async throws {
         let transport = InMemoryTransportDouble(shape: .setShaped)
         let session = try await transport.openSession(for: intent)
-        await transport.script(.fail(.networkInterrupted), for: ChunkID(2))
+        await transport.script(.refuse, for: ChunkID(2))
 
         _ = try await transport.send(transfer(1), in: session)
         let outcome = try await transport.send(transfer(2), in: session)
-        XCTAssertEqual(outcome, .failed(.networkInterrupted))
+        XCTAssertEqual(outcome, .refused(ChunkID(2)))
 
         let confirmation = try await transport.confirmedProgress(in: session)
         XCTAssertEqual(confirmation.progress, .chunks([ChunkID(1)]),
-                       "a failed transfer confirms nothing")
+                       "a refused transfer confirms nothing")
+        let reports = await transport.deliveredReports
+        XCTAssertEqual(reports, [ChunkID(1)],
+                       "a refusal is an answer, not a completion report")
     }
 
-    /// A stall produces no outcome. The authority is the only thing that can settle whether
-    /// the bytes landed, and here they did not.
-    func testTransportDoubleScriptedToStallProducesNoOutcome() async throws {
-        let transport = InMemoryTransportDouble(shape: .setShaped)
-        let session = try await transport.openSession(for: intent)
-        await transport.script(.stall, for: ChunkID(1))
+    /// A stall and a transfer that landed without ever answering produce the same outcome,
+    /// and they have to: the answer never arrived, so the outcome cannot carry a claim
+    /// about whether the bytes reached the authority. Only the authority separates them.
+    func testTransportDoubleScriptedToStallOrToLandSilentlyGivesTheSameNonAnswer() async throws {
+        var confirmed: [ConfirmedProgress] = []
 
-        let outcome = try await transport.send(transfer(1), in: session)
-        XCTAssertEqual(outcome, .stalled)
+        for behavior in [InMemoryTransportDouble.Behavior.stall, .landWithoutAnswering] {
+            let transport = InMemoryTransportDouble(shape: .setShaped)
+            let session = try await transport.openSession(for: intent)
+            await transport.script(behavior, for: ChunkID(1))
 
-        let confirmation = try await transport.confirmedProgress(in: session)
-        XCTAssertEqual(confirmation.progress, .chunks([]), "a stalled transfer confirms nothing")
-        let reports = await transport.deliveredReports
-        XCTAssertEqual(reports, [], "a stall reports nothing at all")
+            let outcome = try await transport.send(transfer(1), in: session)
+            XCTAssertEqual(outcome, .interrupted(ChunkID(1)),
+                           "\(behavior): an interruption is the absence of an answer")
+            let reports = await transport.deliveredReports
+            XCTAssertEqual(reports, [],
+                           "\(behavior): nothing was reported, because nothing answered")
+
+            confirmed.append(try await transport.confirmedProgress(in: session).progress)
+        }
+
+        XCTAssertEqual(confirmed, [.chunks([]), .chunks([ChunkID(1)])],
+                       "the authority, and only the authority, says which interruption landed")
     }
 
     /// Transports do deliver the same completion twice. The double can, so the behaviour

@@ -30,9 +30,16 @@ actor InMemoryTransportDouble: UploadTransport {
     /// What the double does with the next send for a chunk.
     enum Behavior: Sendable, Equatable {
         case succeed
-        case fail(FailureReason)
-        /// Produces no outcome, and nothing lands.
+        /// The transport answers, and the answer is no. Nothing lands.
+        case refuse
+        /// No answer, and nothing lands.
         case stall
+        /// No answer, and the unit lands anyway.
+        ///
+        /// Indistinguishable from `.stall` at the call site, and that is the whole point:
+        /// when the answer never arrives, the outcome cannot carry a claim about whether
+        /// the bytes reached the authority. Only the authority separates these two.
+        case landWithoutAnswering
         /// Lands, and delivers its completion report twice.
         case duplicate
     }
@@ -96,23 +103,32 @@ actor InMemoryTransportDouble: UploadTransport {
     func send(_ transfer: PlannedTransfer,
               in session: TransportSessionID) async throws -> TransferOutcome {
         guard var state = sessions[session] else { throw TransportError.unknownSession }
+        let behavior = behaviors[transfer.chunk] ?? defaultBehavior
 
-        switch behaviors[transfer.chunk] ?? defaultBehavior {
+        switch behavior {
         case .stall:
-            // No outcome, and nothing lands. The caller learns nothing either way.
-            return .stalled
+            // No answer, and nothing lands. The caller learns nothing either way.
+            return .interrupted(transfer.chunk)
 
-        case .fail(let reason):
-            return .failed(reason)
+        case .landWithoutAnswering:
+            // No answer, and the unit lands regardless. The outcome is byte-for-byte the
+            // one `.stall` returns, because an absent answer says nothing about the bytes.
+            state.units.insert(transfer.chunk)
+            state.spans.append(transfer.range)
+            sessions[session] = state
+            return .interrupted(transfer.chunk)
+
+        case .refuse:
+            // An answer, and a negative one. Nothing lands.
+            return .refused(transfer.chunk)
 
         case .succeed, .duplicate:
             state.units.insert(transfer.chunk)
             state.spans.append(transfer.range)
             sessions[session] = state
 
-            let duplicated = (behaviors[transfer.chunk] ?? defaultBehavior) == .duplicate
             deliveredReports.append(transfer.chunk)
-            if duplicated { deliveredReports.append(transfer.chunk) }
+            if behavior == .duplicate { deliveredReports.append(transfer.chunk) }
             return .reportedComplete(transfer.chunk)
         }
     }

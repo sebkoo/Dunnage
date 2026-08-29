@@ -64,6 +64,8 @@ public enum UploadTransition {
 
         case (.undeclared, .transportSessionOpened),
              (.undeclared, .chunkTransferReported),
+             (.undeclared, .chunkTransferRefused),
+             (.undeclared, .chunkTransferInterrupted),
              (.undeclared, .authorityReported),
              (.undeclared, .finalized),
              (.undeclared, .abandoned):
@@ -82,6 +84,8 @@ public enum UploadTransition {
                 [.askAuthorityForConfirmedProgress(intent.upload, session)])
 
         case (.declared, .chunkTransferReported),
+             (.declared, .chunkTransferRefused),
+             (.declared, .chunkTransferInterrupted),
              (.declared, .authorityReported),
              (.declared, .finalized):
             return .rejected(.noTransportSession)
@@ -97,9 +101,17 @@ public enum UploadTransition {
         case (.transferring, .transportSessionOpened):
             return .rejected(.transportSessionAlreadyOpen)
 
-        case (.transferring(let intent, let session, _), .chunkTransferReported):
+        case (.transferring(let intent, let session, _), .chunkTransferReported),
+             (.transferring(let intent, let session, _), .chunkTransferRefused):
             // The state is returned untouched. A transport's report is an observation;
             // it does not confirm anything. All it does is send Core to ask.
+            return .accepted(state, [.askAuthorityForConfirmedProgress(intent.upload, session)])
+
+        case (.transferring(let intent, let session, _), .chunkTransferInterrupted):
+            // Untouched too, and the reason it is untouched is the whole invariant. A
+            // report and a refusal are answers; this is the absence of one. The chunk is
+            // unconfirmed — not failed, and not landed — and nothing here is allowed to
+            // decide which. Core asks; the authority settles it.
             return .accepted(state, [.askAuthorityForConfirmedProgress(intent.upload, session)])
 
         case (.transferring(let intent, let session, _), .authorityReported(let confirmation)):
@@ -123,7 +135,9 @@ public enum UploadTransition {
         case (.finalizing, .transportSessionOpened):
             return .rejected(.transportSessionAlreadyOpen)
 
-        case (.finalizing, .chunkTransferReported):
+        case (.finalizing, .chunkTransferReported),
+             (.finalizing, .chunkTransferRefused),
+             (.finalizing, .chunkTransferInterrupted):
             return .rejected(.allChunksAlreadyConfirmed)
 
         case (.finalizing(let intent, let session, _), .authorityReported(let confirmation)):

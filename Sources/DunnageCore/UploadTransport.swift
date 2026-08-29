@@ -6,6 +6,14 @@
 // See docs/adr/0001-transport-boundary-and-confirmed-progress.md.
 
 /// What a transport says about one transfer it was asked to perform.
+///
+/// Three answers, and the distance between the two negative ones is the point. "The answer
+/// was no" settles that this transfer did not become a unit the authority holds. "No answer
+/// arrived" settles nothing at all. A transport boundary that returned one `failed` case for
+/// both would hand Core a dropped connection and a rejected request as the same fact, and
+/// Core would have to guess which it was.
+///
+/// See docs/adr/0002-interruption-is-not-a-failure.md.
 public enum TransferOutcome: Hashable, Sendable {
     /// The transport says the transfer finished.
     ///
@@ -13,15 +21,17 @@ public enum TransferOutcome: Hashable, Sendable {
     /// it durably holds. Core records it and then goes and asks.
     case reportedComplete(ChunkID)
 
-    /// The transfer did not complete.
-    case failed(FailureReason)
+    /// The transport answered, and the answer was no. This transfer did not become a unit
+    /// the authority holds, and the transport is in a position to say so.
+    case refused(ChunkID)
 
-    /// No outcome was produced at all.
+    /// No answer arrived. A dropped connection and a stall say the same thing — nothing —
+    /// so they are one case and not two, and neither needs a clock to model: an
+    /// interruption is the absence of an answer, not a slow one.
     ///
-    /// A stall is the absence of an answer, not a slow one, so it needs no clock to model.
     /// Whether the bytes landed is unknown, which is exactly the point: only the authority
     /// can settle that.
-    case stalled
+    case interrupted(ChunkID)
 }
 
 public enum TransportError: Error, Hashable, Sendable {

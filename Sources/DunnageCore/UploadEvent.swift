@@ -3,16 +3,18 @@
 // An event is something that happened. It is not, by itself, grounds for a state change:
 // the transition table decides what an event means in the phase it arrives in.
 
-/// Why an upload stopped.
+/// Why an upload was given up on.
 ///
-/// These four are kept apart on purpose. They have different recovery paths, and collapsing
-/// them into one "it failed" discards the only information that decides what to do next.
+/// These are kept apart on purpose. They have different recovery paths, and collapsing them
+/// into one "it failed" discards the only information that decides what to do next.
 /// Recovery per class is not implemented yet.
+///
+/// Every case here is a statement about the upload as a whole. A dropped connection is not
+/// one: it is the absence of an answer about a single chunk, it settles nothing, and it is
+/// carried by `UploadEvent.chunkTransferInterrupted`. A `networkInterrupted` case here would
+/// say that an interruption is grounds for abandoning an upload, and it is not.
+/// See docs/adr/0002-interruption-is-not-a-failure.md.
 public enum FailureReason: Hashable, Sendable {
-    /// The connection dropped mid-transfer. Unconfirmed chunks are re-planned against
-    /// whatever the authority still holds.
-    case networkInterrupted
-
     /// Cancelled from inside the app. Deliberate, and not an error.
     case taskCancelled
 
@@ -43,6 +45,22 @@ public enum UploadEvent: Hashable, Sendable {
     /// are different claims.
     case chunkTransferReported(ChunkID)
 
+    /// A transport answered that a chunk's transfer did not land.
+    ///
+    /// An answer, and a negative one. It is still not a statement by the authority about
+    /// what it holds, so Core records it and goes and asks — but unlike an interruption it
+    /// is something learned about this chunk.
+    case chunkTransferRefused(ChunkID)
+
+    /// No answer arrived for a chunk's transfer. The connection dropped, or the transfer
+    /// stalled; from here the two are the same event.
+    ///
+    /// This is the weakest observation in the alphabet. It does not say the chunk failed
+    /// and it does not say the chunk landed, because the transport is not in a position to
+    /// say either. It is on the log because it happened, and because it is the thing that
+    /// sends Core to the authority.
+    case chunkTransferInterrupted(ChunkID)
+
     /// The authority stated what it holds. This is the only event that moves confirmed
     /// progress.
     case authorityReported(Confirmation)
@@ -63,6 +81,8 @@ public enum UploadEventKind: String, CaseIterable, Hashable, Sendable {
     case declared
     case transportSessionOpened
     case chunkTransferReported
+    case chunkTransferRefused
+    case chunkTransferInterrupted
     case authorityReported
     case finalized
     case abandoned
@@ -74,6 +94,8 @@ extension UploadEvent {
         case .declared:               .declared
         case .transportSessionOpened: .transportSessionOpened
         case .chunkTransferReported:  .chunkTransferReported
+        case .chunkTransferRefused:   .chunkTransferRefused
+        case .chunkTransferInterrupted: .chunkTransferInterrupted
         case .authorityReported:      .authorityReported
         case .finalized:              .finalized
         case .abandoned:              .abandoned
