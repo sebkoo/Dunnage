@@ -69,16 +69,29 @@ jobs:
         if: ${{ !cancelled() }}
         run: |
           set -u
+          # Narrow on purpose, for the reason attribution.awk gives about trailers: a
+          # rule wide enough to catch every mention of the vendor also rejects people.
+          # Each field is tested on its own terms — the name for equality, the email
+          # for its domain — so Jean-Claude Martin and Claude Dupont <claude@corp.com>
+          # are contributors, not tooling.
+          tooling() {                       # tooling NAME EMAIL
+            name=$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')
+            mail=$(printf '%s' "$2" | tr '[:upper:]' '[:lower:]')
+            [ "$name" = "claude" ] && return 0
+            case "$mail" in *@anthropic.com|*.anthropic.com) return 0 ;; esac
+            return 1
+          }
           checked=0; found=0
           for sha in $(git rev-list HEAD); do
             checked=$((checked + 1))
-            identity=$(git log -1 --format='author %an <%ae> | committer %cn <%ce>' "$sha")
-            case "$(printf '%s' "$identity" | tr '[:upper:]' '[:lower:]')" in
-              *claude*|*anthropic.com*)
-                echo "$sha  $identity"
-                found=1
-                ;;
-            esac
+            an=$(git log -1 --format='%an' "$sha")
+            ae=$(git log -1 --format='%ae' "$sha")
+            cn=$(git log -1 --format='%cn' "$sha")
+            ce=$(git log -1 --format='%ce' "$sha")
+            if tooling "$an" "$ae" || tooling "$cn" "$ce"; then
+              echo "$sha  author $an <$ae> | committer $cn <$ce>"
+              found=1
+            fi
           done
           echo "$checked author and committer identities checked"
           [ "$found" -eq 0 ] || { echo "::error::commit recorded under a tooling identity, listed above"; exit 1; }
