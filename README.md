@@ -9,9 +9,10 @@ Durable, resumable background uploads for iOS.
 
 A successful HTTP request is not the same thing as a durable upload.
 
-**Status:** Core and the durable ledger — intent model, total transition table,
-append-only event log with a file-backed implementation, and the transport boundary with
-an in-memory double. No real transport, no AWS, no app.
+**Status:** Core, the durable ledger and the driver — intent model, total transition
+table, append-only event log with a file-backed implementation, the transport boundary
+with an in-memory double, and the driver that executes Core's effects behind an injected
+clock. No real transport, no AWS, no app.
 
 Three mechanisms this library keeps apart, because none of them implies the others:
 
@@ -49,10 +50,11 @@ named so that its absence is legible.
        owns the background URLSession, speaks S3 multipart
        against the presigned URLs the control plane issues
    ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─
-     Driver                                      phase 3   not built
-       executes Core's effects, records what a transport answered,
-       and waits behind its own clock
-   ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─
+   ┌────────────────────────────────────────────────────────────────┐
+   │  DunnageDriver                              phase 3   landed   │
+   │    executes Core's effects, records what a transport           │
+   │    answered, concludes nothing, and waits behind its own clock │
+   └────────────────────────────────────────────────────────────────┘
    ┌────────────────────────────────────────────────────────────────┐
    │  DunnageLedger                              phase 2   landed   │
    │    the append-only event log, on a file                        │
@@ -95,7 +97,7 @@ No percentages. A named invariant either exists or it does not.
 |---|---|---|
 | **1. Core** | A chunk the transport authority has confirmed is never re-sent, under an identity and payload contract Core does not interpret, and no two ways of not being confirmed are treated as one. | landed — 39 named tests |
 | **2. Durable ledger** | The log outlives the process that wrote it: replaying it from disk reproduces state exactly, and a file that is not a log says so rather than deriving one. ADR-0001 O-1 was the open question here; ADR-0004 decides it. | landed — 21 named tests |
-| **3. Driver** | The driver executes Core's effects and records what a transport answered, and concludes nothing of its own: a transfer it stopped waiting for is not a refusal, the attempt tally is not the driver's to keep, and an upload is given up on because Core asked for it. | not started |
+| **3. Driver** | The driver executes Core's effects and records what a transport answered, and concludes nothing of its own: a transfer it stopped waiting for is not a refusal, the attempt tally is not the driver's to keep, and an upload is given up on because Core asked for it. | landed — 22 named tests |
 | **4. Transport, control plane and data plane** | The bound holds against a real transport: after an interruption, redundant transfer is bounded by the chunks that were in flight and unconfirmed. The device never holds an AWS credential, the server derives object ownership from the authenticated principal, and `cdk synth` runs with no cloud credentials. | not started |
 | **5. App** | The invariant survives real lifecycle events. A simulated process death is not a SIGKILL, and phase 1 does not claim otherwise. | not started |
 
@@ -141,3 +143,4 @@ establish. The named tests are in [`docs/invariants.md`](docs/invariants.md).
 - An upload picked up from the log asks the authority before it sends anything
 - Giving up reaches the log because Core asked for it, and for no other reason
 - Phase 3's doubles keep the contracts they stand in for
+- The failure mode a driver that concludes reintroduces, kept working on purpose

@@ -2,11 +2,6 @@ import XCTest
 import DunnageCore
 import DunnageDriver
 
-/// A timeout no test in `DriverRecordingTests` or `DriverWaitingTests` grants, so no transfer
-/// in either of them is ever waited out. What the timeout does when it is granted is
-/// `DriverTimeoutTests`.
-private let neverReached = Duration.seconds(30)
-
 /// The driver executes and records, and the recording half is these two invariants: a
 /// transport's answer becomes the one event that means it, and that event is durable before
 /// the next transfer begins.

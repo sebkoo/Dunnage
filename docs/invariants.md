@@ -254,3 +254,27 @@ with the thing it replaces makes every test standing on it worthless.
 - `testTheDoubleScriptedToNeverAnswerDoesNotAnswerUntilItsTaskIsCancelled`
 - `testTheJournallingLogKeepsTheContractOfTheOneItWraps`
 - `testTheJournallingTransportAnswersExactlyWhatTheOneItWrapsAnswers`
+
+### The failure mode a driver that concludes reintroduces, kept working on purpose
+
+Phase 1's control is bytes re-sent that were confirmed. Phase 2's is bytes skipped that were
+not. This one is neither: it is an upload abandoned that nothing was wrong with.
+
+`ConcludingDriver` is the same loop with one line different — an interruption recorded as a
+refusal, the collapse ADR-0002 exists to remove, arriving on the other side of the boundary
+from where that ADR removed it. Nothing else about it is wrong: it keeps no tally and reaches
+no conclusion, and every abandonment it writes is one Core asked for. The fault is upstream of
+all of that, in what it says happened, and Core is then correct about evidence that is false.
+
+Same transport, same script, same policy, same clock with the same backoffs granted. A chunk
+goes quiet three times and then lands, and nothing anywhere ever answers no. One driver
+finishes the upload. The other gives up on it with four of the five chunks confirmed, one
+transfer short of the one that would have finished it — and the log it leaves is internally
+consistent, which is what makes this the dangerous one.
+
+It is never "fixed". If the concluding driver stops giving up here, the control has been
+broken and the real driver has nothing left to be measured against.
+
+- `testTheConcludingDriverKeepsTheContractItIsMeasuredAgainst`
+- `testADriverThatCallsAnInterruptionARefusalGivesUpOnAnUploadNothingRefused`
+- `testTheRealDriverAfterTheSameInterruptionsFinishesTheUpload`

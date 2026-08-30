@@ -81,6 +81,11 @@ final class VirtualClock: DriverClock, @unchecked Sendable {
     }
 }
 
+/// A driver timeout that no test grants, so no transfer in a test using it is ever waited
+/// out. What the timeout does when it *is* granted is `DriverTimeoutTests`, and every other
+/// class passes this so that the timeout is present and irrelevant rather than absent.
+let neverReached = Duration.seconds(30)
+
 /// A transfer that never answers.
 ///
 /// Cancellation is the only thing that ends it, which is exactly what makes the caller's own
