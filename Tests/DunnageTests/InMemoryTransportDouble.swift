@@ -42,6 +42,13 @@ actor InMemoryTransportDouble: UploadTransport {
         case landWithoutAnswering
         /// Lands, and delivers its completion report twice.
         case duplicate
+        /// Never answers at all, and nothing lands.
+        ///
+        /// Silence, not slowness. `.stall` is a transport that answered "no answer" and
+        /// returned; this one does not return, so the only thing that ends it is the caller
+        /// giving up on waiting — which is what makes the caller's own timeout the thing
+        /// under test rather than the double's.
+        case neverAnswers
     }
 
     private struct Session {
@@ -147,6 +154,9 @@ actor InMemoryTransportDouble: UploadTransport {
         case .refuse:
             // An answer, and a negative one. Nothing lands.
             return .refused(transfer.chunk)
+
+        case .neverAnswers:
+            try await Silence.untilCancelled()
 
         case .succeed, .duplicate:
             state.units.insert(transfer.chunk)

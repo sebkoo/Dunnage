@@ -98,6 +98,30 @@ final class DriverDoubleContractTests: XCTestCase {
                        "the queue first, in order, and then the standing script")
     }
 
+    /// Silence is not slowness. A transfer scripted to never answer does not answer, does
+    /// not land, and ends only when whoever was waiting for it stops — which is exactly what
+    /// makes the driver's own timeout the thing under test.
+    func testTheDoubleScriptedToNeverAnswerDoesNotAnswerUntilItsTaskIsCancelled() async throws {
+        let transport = InMemoryTransportDouble(shape: .setShaped)
+        await transport.scriptOnce(.neverAnswers, for: ChunkID(1))
+        let session = try await transport.openSession(for: intent)
+
+        let transfer = self.transfer(1)
+        let sending = Task { try await transport.send(transfer, in: session) }
+        while await !transport.calls.contains(.sent(ChunkID(1))) { await Task.yield() }
+
+        sending.cancel()
+        do {
+            let outcome = try await sending.value
+            XCTFail("it answered \(outcome), and it was scripted never to answer")
+        } catch is CancellationError {
+            // as expected: the only way out of a silence is to stop waiting for it
+        }
+
+        let held = try await transport.confirmedProgress(in: session)
+        XCTAssertEqual(held.progress, .chunks([]), "and nothing landed while it was quiet")
+    }
+
     /// The journalling log is the in-memory log with one extra note taken, so it owes the
     /// same contract. A wrapper that dropped a record would make every ordering assertion
     /// built on it a statement about the wrapper.

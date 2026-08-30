@@ -200,6 +200,21 @@ driver is the thing that waits, and this is the only place backoff exists.
 - `testTheWaitOnASendIsHonouredBeforeTheTransferAndByTheInjectedClock`
 - `testTheOnlyWaitsTheDriverTakesAreTheOnesTheEffectsCarried`
 
+### A transfer that never answers is an interruption, and how long the driver waited is the driver's alone
+
+A timeout is driver policy, and this is where the whole of it lives. Stopping produces the
+event that already means "no answer arrived", so a transport that said so and a driver that
+stopped waiting for one leave the log identical — there is no duration on it, no third event,
+and nothing that lets the fold tell them apart.
+
+Every test here gives each chunk one attempt. A driver that called a quiet transfer a
+refusal would spend the only attempt there is, and the upload would fail instead of
+finishing, so each of these is an assertion about the budget as well.
+
+- `testATransferQuietLongerThanTheDriversTimeoutBecomesAnInterruption`
+- `testAQuietTransferAndAnAnsweredInterruptionLeaveTheSameLog`
+- `testATransferThatAnswersInsideTheTimeoutIsNotQuiet`
+
 ### Phase 3's doubles keep the contracts they stand in for
 
 The clock is what makes every timing assertion in this phase deterministic, and the journal
@@ -210,5 +225,6 @@ with the thing it replaces makes every test standing on it worthless.
 - `testTheVirtualClockSpendsAGrantOnOneWaitAndNoMore`
 - `testTheVirtualClockAbandonsAWaitItsTaskNoLongerNeeds`
 - `testTheDoubleScriptedOnceAnswersThatWayOnceAndThenAsItWasBefore`
+- `testTheDoubleScriptedToNeverAnswerDoesNotAnswerUntilItsTaskIsCancelled`
 - `testTheJournallingLogKeepsTheContractOfTheOneItWraps`
 - `testTheJournallingTransportAnswersExactlyWhatTheOneItWrapsAnswers`

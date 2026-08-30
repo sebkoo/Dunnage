@@ -23,13 +23,17 @@ public struct UploadDriver: Sendable {
     private let transport: any UploadTransport
     private let log: any UploadEventLog
     private let clock: any DriverClock
+    private let quietAfter: Duration
 
     public init(transport: any UploadTransport,
                 log: any UploadEventLog,
-                clock: any DriverClock) {
+                clock: any DriverClock,
+                quietAfter: Duration) {
+        precondition(quietAfter > .zero, "a transfer given no time to answer is never given one")
         self.transport = transport
         self.log = log
         self.clock = clock
+        self.quietAfter = quietAfter
     }
 
     /// Declare an upload and drive it as far as it goes: until nothing is outstanding, or
@@ -99,7 +103,7 @@ public struct UploadDriver: Sendable {
 
             var produced: [UploadEffect] = []
             for transfer in transfers {
-                let outcome = try await transport.send(transfer, in: session)
+                let outcome = try await answer(for: transfer, in: session)
                 for next in try await record(Self.event(for: outcome), for: upload, into: &state)
                 where !produced.contains(next) {
                     produced.append(next)
@@ -114,6 +118,43 @@ public struct UploadDriver: Sendable {
         case .abandon(_, let reason):
             // The one place `.abandoned` is written, and it is written because Core asked.
             return try await record(.abandoned(reason), for: upload, into: &state)
+        }
+    }
+
+    /// Hand a transfer over, and stop waiting for the answer after `quietAfter`.
+    ///
+    /// Stopping produces `.interrupted`, because that is already what "no answer arrived"
+    /// means. There is no third outcome and no duration on the event, so a transport that
+    /// answered "no answer" and a driver that stopped waiting for one are the same fact, and
+    /// Core cannot tell them apart — which is the point.
+    ///
+    /// It does not say the transfer failed: Core's response is to ask the authority, and if
+    /// the bytes did land the next answer says so and the chunk is never sent again. The
+    /// timeout is safe *because* of ADR-0002, and it is charged nothing for the same reason.
+    ///
+    /// It does not say the transfer stopped either. Here the driver stops waiting and the
+    /// in-process transfer stops with it; a background `URLSession` transfer would not, and
+    /// the event would still be true, because the event is about the answer. That the two
+    /// coincide is a property of this phase's transport and not of the design.
+    private func answer(for transfer: PlannedTransfer,
+                        in session: TransportSessionID) async throws -> TransferOutcome {
+        try await withThrowingTaskGroup(of: TransferOutcome?.self) { group in
+            group.addTask { try await transport.send(transfer, in: session) }
+            group.addTask {
+                try await clock.wait(for: quietAfter)
+                return nil                       // the deadline came, and no answer with it
+            }
+
+            // Whichever settles first. A transport that throws rethrows here, and ADR-0005
+            // §8 says what that means: no event, and the round stops.
+            let first = try await group.next()!
+
+            // The loser is cancelled and its failure is discarded, because a wait this
+            // driver abandoned is not an answer about this transfer. Errors from children
+            // never taken from the group are dropped when the body returns; that this
+            // driver depends on it is why it is written down.
+            group.cancelAll()
+            return first ?? .interrupted(transfer.chunk)
         }
     }
 

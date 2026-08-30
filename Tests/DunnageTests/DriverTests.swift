@@ -2,6 +2,11 @@ import XCTest
 import DunnageCore
 import DunnageDriver
 
+/// A timeout no test in `DriverRecordingTests` or `DriverWaitingTests` grants, so no transfer
+/// in either of them is ever waited out. What the timeout does when it is granted is
+/// `DriverTimeoutTests`.
+private let neverReached = Duration.seconds(30)
+
 /// The driver executes and records, and the recording half is these two invariants: a
 /// transport's answer becomes the one event that means it, and that event is durable before
 /// the next transfer begins.
@@ -42,7 +47,8 @@ final class DriverRecordingTests: XCTestCase {
         await transport.script(.refuse, for: ChunkID(2))
         await transport.script(.stall, for: ChunkID(3))
         let log = InMemoryEventLog()
-        let driver = UploadDriver(transport: transport, log: log, clock: VirtualClock())
+        let driver = UploadDriver(transport: transport, log: log, clock: VirtualClock(),
+                                  quietAfter: neverReached)
 
         let state = try await driver.run(intent)
 
@@ -78,7 +84,8 @@ final class DriverRecordingTests: XCTestCase {
         let driver = UploadDriver(
             transport: JournallingTransport(wrapped: double, journal: journal),
             log: JournallingEventLog(wrapped: InMemoryEventLog(), journal: journal),
-            clock: VirtualClock())
+            clock: VirtualClock(),
+            quietAfter: neverReached)
 
         _ = try await driver.run(intent)
 
@@ -140,7 +147,8 @@ final class DriverWaitingTests: XCTestCase {
         let driver = UploadDriver(
             transport: JournallingTransport(wrapped: double, journal: journal),
             log: JournallingEventLog(wrapped: InMemoryEventLog(), journal: journal),
-            clock: JournallingClock(wrapped: clock, journal: journal))
+            clock: JournallingClock(wrapped: clock, journal: journal),
+            quietAfter: neverReached)
 
         let state = try await driver.run(intent)
 
@@ -182,7 +190,8 @@ final class DriverWaitingTests: XCTestCase {
         for backoff in [Duration.milliseconds(500), .seconds(1), .seconds(2)] {
             clock.grant(backoff)
         }
-        let driver = UploadDriver(transport: transport, log: InMemoryEventLog(), clock: clock)
+        let driver = UploadDriver(transport: transport, log: InMemoryEventLog(), clock: clock,
+                                  quietAfter: neverReached)
 
         let state = try await driver.run(intent)
 
@@ -192,5 +201,114 @@ final class DriverWaitingTests: XCTestCase {
                        "the doubling the policy computes, and nothing the driver added")
         let chunkOne = await transport.calls.filter { $0 == .sent(ChunkID(1)) }.count
         XCTAssertEqual(chunkOne, 1, "a confirmed chunk is not sent again while another retries")
+    }
+}
+
+/// A timeout is driver policy. Core does not measure how long a transfer was quiet, and
+/// deciding that a quiet one should now be called interrupted belongs here.
+///
+/// See ADR-0002 and `docs/adr/0005-the-driver-and-the-clock-it-waits-behind.md` §5.
+final class DriverTimeoutTests: XCTestCase {
+
+    private let quietAfter = Duration.seconds(30)
+
+    /// One attempt each. That is what turns every test in this class into an assertion about
+    /// the budget as well: a driver that called any of these transfers a refusal would spend
+    /// the only attempt there is, and the upload would fail instead of finishing.
+    private let policy = RetryPolicy(maxAttemptsPerChunk: 1,
+                                     initialBackoff: .milliseconds(500),
+                                     maximumBackoff: .seconds(4))
+
+    // one chunk, four bytes. One transfer per round, so which transfer a granted timeout
+    // belongs to is never a question.
+    private var intent: UploadIntent {
+        UploadIntent(upload: UploadID("upload-c"),
+                     destination: DestinationRef("destination-c"),
+                     plan: ChunkPlan(totalBytes: 4, chunkSize: 4),
+                     policy: policy)
+    }
+
+    private let session = TransportSessionID("session-1")
+
+    private func held(_ chunks: Set<ChunkID>) -> Confirmation {
+        Confirmation(upload: intent.upload, session: session, progress: .chunks(chunks))
+    }
+
+    private func drive(_ behavior: InMemoryTransportDouble.Behavior,
+                       grantingTimeouts timeouts: Int) async throws
+        -> (state: UploadMachineState, written: [UploadEvent], clock: VirtualClock) {
+        let transport = InMemoryTransportDouble(shape: .setShaped)
+        await transport.scriptOnce(behavior, for: ChunkID(1))
+        let clock = VirtualClock()
+        if timeouts > 0 { clock.grant(quietAfter, times: timeouts) }
+        let log = InMemoryEventLog()
+        let driver = UploadDriver(transport: transport, log: log, clock: clock,
+                                  quietAfter: quietAfter)
+
+        let state = try await driver.run(intent)
+        return (state, try await log.records(for: intent.upload).map(\.event), clock)
+    }
+
+    /// The transport is handed the transfer and never comes back. The driver stops waiting
+    /// and records the event that means "no answer arrived" — not a refusal, which would
+    /// spend the only attempt this policy allows and fail the upload, and not an abandonment,
+    /// which is not the driver's to reach.
+    ///
+    /// Core's answer to an interruption is to ask the authority, so the upload carries on and
+    /// the second attempt finishes it.
+    func testATransferQuietLongerThanTheDriversTimeoutBecomesAnInterruption() async throws {
+        let run = try await drive(.neverAnswers, grantingTimeouts: 1)
+
+        XCTAssertEqual(run.written, [
+            .declared(intent),
+            .transportSessionOpened(session),
+            .authorityReported(held([])),
+            .chunkTransferInterrupted(ChunkID(1)),
+            .authorityReported(held([])),
+            .chunkTransferReported(ChunkID(1)),
+            .authorityReported(held([ChunkID(1)])),
+            .finalized,
+        ], "quiet is an interruption, and an interruption spends nothing")
+
+        XCTAssertEqual(run.state, .completed(intent: intent),
+                       "an upload with one attempt per chunk survives being waited out")
+    }
+
+    /// The same log, twice, from two different silences: one the transport answered for and
+    /// one the driver stopped waiting for.
+    ///
+    /// This is what "Core is never told how long it waited" comes to. There is no duration on
+    /// the log, no third event, and nothing anywhere that lets the fold tell the two apart —
+    /// which is the point, because they are the same fact. The driver's timeout is a decision
+    /// about how long to wait, not a decision about a chunk.
+    func testAQuietTransferAndAnAnsweredInterruptionLeaveTheSameLog() async throws {
+        let answered = try await drive(.stall, grantingTimeouts: 0)
+        let waitedOut = try await drive(.neverAnswers, grantingTimeouts: 1)
+
+        XCTAssertEqual(waitedOut.written, answered.written,
+                       "a transport that said 'no answer' and a driver that stopped waiting "
+                       + "for one leave the log identical")
+        XCTAssertEqual(waitedOut.state, answered.state)
+    }
+
+    /// The timeout is armed for every transfer and wins only when nothing else does. A
+    /// transport that answers is not made quiet by the mere existence of the deadline, and
+    /// the clock shows it: the wait was asked for and never taken.
+    func testATransferThatAnswersInsideTheTimeoutIsNotQuiet() async throws {
+        let run = try await drive(.succeed, grantingTimeouts: 0)
+
+        XCTAssertEqual(run.written, [
+            .declared(intent),
+            .transportSessionOpened(session),
+            .authorityReported(held([])),
+            .chunkTransferReported(ChunkID(1)),
+            .authorityReported(held([ChunkID(1)])),
+            .finalized,
+        ], "an answer that arrived is the answer that is recorded")
+
+        XCTAssertEqual(run.clock.waitsRequested, [.zero, quietAfter],
+                       "the timeout was armed for the transfer")
+        XCTAssertEqual(run.clock.waitsTaken, [.zero],
+                       "and it lost the race, so it was never taken")
     }
 }

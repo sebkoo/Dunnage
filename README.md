@@ -137,4 +137,5 @@ establish. The named tests are in [`docs/invariants.md`](docs/invariants.md).
 
 - A transport's answer becomes one event, on the log, before the next transfer begins
 - The wait a send has earned is honoured before the transfer, by the driver's own clock
+- A transfer that never answers is an interruption, and how long the driver waited is the driver's alone
 - Phase 3's doubles keep the contracts they stand in for
