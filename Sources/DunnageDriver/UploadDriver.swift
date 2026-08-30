@@ -40,8 +40,8 @@ public struct UploadDriver: Sendable {
     /// until it reaches a terminal phase.
     ///
     /// Returns the state the log now derives. An upload the log has already seen is not
-    /// declared twice; picking one up from the log is a separate decision and is not made
-    /// here yet.
+    /// declared a second time — it is picked up from wherever the log left it, which is the
+    /// same thing `resume(_:)` does with an identifier alone.
     @discardableResult
     public func run(_ intent: UploadIntent) async throws -> UploadMachineState {
         var state = UploadTransition.replay(

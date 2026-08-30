@@ -83,8 +83,9 @@ replay the log ─▶ outstanding work ─▶ execute one effect ─▶ append w
       └──────────────── fold, and queue what the fold asked for ◀─────┘
 ```
 
-`UploadDriver` is a `struct` with four stored properties, all of them injected
-collaborators. It has no counters, no cache and no notion of where an upload got to. That
+`UploadDriver` is a `struct` holding three injected collaborators — a transport, a log and
+a clock — and one number, the timeout in §5. It has no counters, no cache and no notion of
+where an upload got to. That
 is not an economy; it is ADR-0003 §2 in the type system. A driver with a field is a driver
 with a second answer to a question the log already answers, and then a rule for what to do
 when the two disagree.
@@ -137,7 +138,9 @@ One method, because the driver has one need: to not proceed for a while. A `now`
 the driver compute a duration of its own, and every duration the driver is allowed to
 compute is a number Core did not sanction.
 
-The suite's conformance is a virtual clock that moves only when a test moves it. The
+The suite's conformance grants a wait only when a test says it may, and has no timeline at
+all: every ordering the suite asserts is between actions — a wait taken before a transfer
+began — and not between instants, so no test is slower because a backoff is long. The
 package's other conformance sleeps, is used by nothing in the suite, and is the one piece
 of production code here with no test behind it: a test of a real sleep is a wall-clock wait,
 which this repository does not have.
