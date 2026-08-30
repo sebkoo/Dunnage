@@ -414,3 +414,100 @@ final class DriverColdStartTests: XCTestCase {
         XCTAssertEqual(calls, [], "and a finished upload is not work either")
     }
 }
+
+/// `.abandoned` is the only event that reaches a terminal phase, so what puts it on the log
+/// is what makes `.failed` a decision rather than a drift. Core asks; the driver writes.
+///
+/// See ADR-0003 §5 and `docs/adr/0005-the-driver-and-the-clock-it-waits-behind.md` §2.
+final class DriverAbandonmentTests: XCTestCase {
+
+    private let policy = RetryPolicy(maxAttemptsPerChunk: 2,
+                                     initialBackoff: .milliseconds(500),
+                                     maximumBackoff: .seconds(4))
+
+    private func intent(_ id: String, chunks: Int) -> UploadIntent {
+        UploadIntent(upload: UploadID(id),
+                     destination: DestinationRef("destination-\(id)"),
+                     plan: ChunkPlan(totalBytes: chunks * 4, chunkSize: 4),
+                     policy: policy)
+    }
+
+    /// The same fold as `UploadTransition.replay`, keeping the effects the last accepted
+    /// event produced. Replay drops them deliberately; keeping them is how a test asks what
+    /// Core had asked for at a given point on the log.
+    private func fold(_ events: [UploadEvent]) -> [UploadEffect] {
+        var state = UploadTransition.initialState
+        var asked: [UploadEffect] = []
+        for event in events {
+            if case .accepted(let next, let effects) = UploadTransition.apply(event, to: state) {
+                state = next
+                asked = effects
+            }
+        }
+        return asked
+    }
+
+    /// An upload that really does spend its budget, so there is an abandonment to account
+    /// for — and then the accounting: at the point on the log where it appears, the fold of
+    /// everything before it was asking for exactly that.
+    ///
+    /// This is checkable from the log alone, which is the property worth having. Whatever the
+    /// driver was thinking at the time, an abandonment nobody asked for is visible for ever
+    /// afterwards to anyone who replays the prefix in front of it.
+    func testEveryAbandonmentOnTheLogIsOneCoreAskedFor() async throws {
+        let intent = intent("upload-e", chunks: 2)
+        let transport = InMemoryTransportDouble(shape: .setShaped)
+        await transport.script(.refuse, for: ChunkID(2))
+        let clock = VirtualClock()
+        clock.grant(.milliseconds(500))
+        let log = InMemoryEventLog()
+
+        let state = try await UploadDriver(transport: transport, log: log, clock: clock,
+                                           quietAfter: neverReached).run(intent)
+        XCTAssertEqual(state, .failed(intent: intent, reason: .retriesExhausted,
+                                      confirmed: .chunks([ChunkID(1)])),
+                       "the upload did give up, so there is something to account for")
+
+        let written = try await log.records(for: intent.upload).map(\.event)
+        let abandonments = written.indices.filter {
+            if case .abandoned = written[$0] { true } else { false }
+        }
+        XCTAssertEqual(abandonments.count, 1)
+
+        for index in abandonments {
+            XCTAssertTrue(fold(Array(written[..<index]))
+                            .contains(.abandon(intent.upload, .retriesExhausted)),
+                          "the fold of the log in front of it was asking for exactly this")
+        }
+    }
+
+    /// Every excuse and no reason. One chunk, one attempt's worth of budget, and a transport
+    /// that stalls, goes silent past the driver's timeout, and stalls again before it finally
+    /// answers. Nothing ever refuses anything.
+    ///
+    /// A driver that counted its own patience would have given up three times over. This one
+    /// writes no abandonment, because Core never asked for one — an interruption costs
+    /// nothing, so the budget is untouched and the upload is still going.
+    func testADriverGivenEveryExcuseToGiveUpAppendsNoAbandonmentCoreDidNotAskFor() async throws {
+        let intent = intent("upload-f", chunks: 1)
+        let transport = InMemoryTransportDouble(shape: .setShaped)
+        // The silence goes first because the timeout grant goes to the first timer that
+        // arms, and every transfer arms one.
+        await transport.scriptOnce(.neverAnswers, for: ChunkID(1))
+        await transport.scriptOnce(.stall, for: ChunkID(1))
+        await transport.scriptOnce(.stall, for: ChunkID(1))
+        let clock = VirtualClock()
+        clock.grant(.seconds(30))
+        let log = InMemoryEventLog()
+
+        let state = try await UploadDriver(transport: transport, log: log, clock: clock,
+                                           quietAfter: .seconds(30)).run(intent)
+
+        let written = try await log.records(for: intent.upload).map(\.event)
+        XCTAssertEqual(written.filter { if case .chunkTransferInterrupted = $0 { true } else { false } }.count,
+                       3, "three transfers in a row said nothing")
+        XCTAssertFalse(written.contains { if case .abandoned = $0 { true } else { false } },
+                       "and not one of them is a reason to give up on the upload")
+        XCTAssertEqual(state, .completed(intent: intent))
+    }
+}

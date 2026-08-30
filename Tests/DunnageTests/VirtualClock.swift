@@ -37,6 +37,10 @@ final class VirtualClock: DriverClock, @unchecked Sendable {
     /// Let a wait of exactly `duration` elapse, `times` times. Grants are consumed, so a
     /// test that grants one wait and a driver that takes two is a test that hangs rather
     /// than one that passes.
+    ///
+    /// A grant goes to the first wait that asks for that duration. The driver arms its
+    /// timeout for every transfer, so granting one timeout grants it to the first transfer
+    /// of the run and to no other.
     func grant(_ duration: Duration, times: Int = 1) {
         locked { grants[duration, default: 0] += times }
     }

@@ -227,6 +227,20 @@ authority may well have moved past it.
 - `testAnUploadPickedUpBeforeAnyTransportOperationOpensOneAndThenAsks`
 - `testAnUploadWithNothingOutstandingIsLeftAloneWhenItIsPickedUp`
 
+### Giving up reaches the log because Core asked for it, and for no other reason
+
+`.abandoned` is the only event that reaches a terminal phase, so what puts it on the log is
+what makes `.failed` a decision rather than a drift.
+
+The first of these is checkable from the log alone, which is the property worth having:
+whatever the driver was thinking at the time, an abandonment nobody asked for is visible for
+ever afterwards to anyone who replays the prefix in front of it. The second gives a driver
+every excuse and no reason — a chunk stalled, waited out past the timeout, and stalled
+again, with nothing ever refusing anything.
+
+- `testEveryAbandonmentOnTheLogIsOneCoreAskedFor`
+- `testADriverGivenEveryExcuseToGiveUpAppendsNoAbandonmentCoreDidNotAskFor`
+
 ### Phase 3's doubles keep the contracts they stand in for
 
 The clock is what makes every timing assertion in this phase deterministic, and the journal
