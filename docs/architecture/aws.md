@@ -122,6 +122,8 @@ Not because Lambda cannot receive them. **It can, and this design deliberately d
 
 S3 does not prevent it; **this design does not arrange it that way.** `ListParts` is a separate S3 API call requiring `s3:ListMultipartUploadParts`, and a per-part presigned PUT URL is not a means of authorizing that call. The permission stays in the control plane and the device uses the progress view the backend hands it. A client holding suitable credentials could make the call — the decision is not to put the device in that position.
 
-## Open — does the control plane need DynamoDB?
+## Decided — the control plane does not need DynamoDB
 
-Not answered today. S3 already holds authoritative multipart state. DynamoDB is introduced only if the control plane needs application-level queries, ownership records, idempotency state, or lifecycle tracking that S3 cannot serve efficiently. Adding a store before the need is demonstrated is speculative. Recorded as open in `docs/adr/0001-transport-boundary-and-confirmed-progress.md`, O-2.
+Answered in `docs/adr/0006-the-control-plane-and-the-identity-it-composes.md` §5, which closes ADR-0001 O-2. Once the control plane's four routes were written down, the questions it has to answer could be enumerated rather than estimated, and every one it must answer to serve those routes is served by S3's own part enumeration and by a key the server derives from the authenticated principal. **No database is introduced.**
+
+The honest remainder is idempotency. A create request retried after its response was lost opens a second multipart operation, and nothing in S3 dedupes it. That is ADR-0005 O-8 — a storage cost at the authority and not a correctness one, because no confirmed chunk is re-sent — and the bucket's `abortIncompleteMultipartUploadAfter` rule bounds it. If it ever has to be *prevented* rather than bounded, that is the demonstrated need this section spent its life asking for, and O-2 reopens with a reason rather than a hunch.

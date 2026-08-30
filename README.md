@@ -32,8 +32,9 @@ a sum type rather than a number.
 See `docs/adr/0001-transport-boundary-and-confirmed-progress.md`,
 `docs/adr/0002-interruption-is-not-a-failure.md`,
 `docs/adr/0003-what-an-attempt-is-and-where-time-enters.md`,
-`docs/adr/0004-the-on-disk-ledger-and-what-an-unreadable-record-does.md`, and
-`docs/adr/0005-the-driver-and-the-clock-it-waits-behind.md`.
+`docs/adr/0004-the-on-disk-ledger-and-what-an-unreadable-record-does.md`,
+`docs/adr/0005-the-driver-and-the-clock-it-waits-behind.md`, and
+`docs/adr/0006-the-control-plane-and-the-identity-it-composes.md`.
 
 ## Bird's-eye view
 
@@ -86,8 +87,10 @@ named so that its absence is legible.
    ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─
 ```
 
-DynamoDB is not in the picture. ADR-0001 O-2 leaves the question open, and drawing
-a box for it would answer it.
+DynamoDB is not in the picture. ADR-0006 §5 closes ADR-0001 O-2: S3's own part
+enumeration answers what the control plane must answer to do its job, so the box
+is absent because nothing needs one, not because nobody has decided. The one
+thing it does not serve, idempotency, is a bounded storage cost.
 
 ## Progress
 

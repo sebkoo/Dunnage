@@ -188,6 +188,16 @@ now would fix a format against an unwritten writer.
 
 ### O-2. Where does the server-side upload record live?
 
+**Decided by ADR-0006.** The paragraphs below record why it was left open, and the condition
+they name has since been met: the control plane's routes are written down, so what it has to
+query is enumerable rather than estimated. Every question it must answer to serve those
+routes is served by S3's own part enumeration and by a key the server derives from the
+authenticated principal, so **no database is introduced**. The one row nothing serves is
+idempotency — whether a create request is a retry of one already served — and that is
+ADR-0005 O-8: a storage cost at the authority, not a correctness one, bounded by the
+bucket's lifecycle rule. If it ever has to be *prevented* rather than bounded, that is the
+demonstrated need this question asked for, and O-2 reopens with a reason.
+
 Candidate answer: one item per upload in a key-value store (DynamoDB). But S3's own part
 enumeration may already be sufficient, in which case no database is needed at all. The
 question is whether the control plane requires application-level queries, ownership

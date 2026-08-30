@@ -145,6 +145,12 @@ sees an upload that will not move rather than one that quietly restarts. It is b
 the invariant, which is the trade this repository takes everywhere else, and it is the only
 one of the two whose failure is visible.
 
+**What this is not.** This is the ledger's answer for a record it cannot read. It is not a
+general rule for every value the log carries that some component cannot interpret. A
+`TransportSessionID` that does not parse is decoded correctly here — it is a `String`, and
+neither this module nor Core reads it — so it poisons no fold, and refusing a replay over it
+would discard correct state. ADR-0006 §3 decides that case and says why the answer differs.
+
 This is a decision about *replay*, not a repair. Nothing is rewritten and nothing is
 dropped. The ledger says it cannot read the log, and stops.
 
