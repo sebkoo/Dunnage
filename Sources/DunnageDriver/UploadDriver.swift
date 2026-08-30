@@ -47,11 +47,47 @@ public struct UploadDriver: Sendable {
         var state = UploadTransition.replay(
             try await log.records(for: intent.upload).map(\.event))
 
-        var queue: [UploadEffect] = []
         if case .undeclared = state {
-            queue = try await record(.declared(intent), for: intent.upload, into: &state)
+            try await record(.declared(intent), for: intent.upload, into: &state)
         }
-        return try await drive(intent.upload, state: &state, queue: queue)
+        return try await drive(intent.upload, state: &state,
+                               queue: Self.outstandingWork(in: state))
+    }
+
+    /// Pick up an upload the log already knows about, and drive it as far as it goes.
+    @discardableResult
+    public func resume(_ upload: UploadID) async throws -> UploadMachineState {
+        var state = UploadTransition.replay(try await log.records(for: upload).map(\.event))
+        return try await drive(upload, state: &state,
+                               queue: Self.outstandingWork(in: state))
+    }
+
+    /// What a state has outstanding, for a driver that has just picked it up.
+    ///
+    /// `UploadTransition.replay` discards effects on purpose — re-emitting them would
+    /// re-send bytes on every cold start — so a state arriving from the log has no work
+    /// attached to it and needs a rule. The rule is the weakest effect each phase already
+    /// produces on entry.
+    ///
+    /// `send` is not on this list and cannot be. A resumed upload asks before it sends, so
+    /// nothing goes out against an answer given before the process died — an answer the
+    /// authority may well have moved past.
+    ///
+    /// No `default:`, for the reason the transition table has none: a new phase should be a
+    /// compile error here rather than an upload that silently has nothing to do.
+    private static func outstandingWork(in state: UploadMachineState) -> [UploadEffect] {
+        switch state {
+        case .undeclared:
+            []                                                  // the log knows no such upload
+        case .declared(let intent):
+            [.openTransportSession(intent)]
+        case .transferring(let intent, let session, _, _):
+            [.askAuthorityForConfirmedProgress(intent.upload, session)]
+        case .finalizing(let intent, let session, _, _):
+            [.finalize(intent.upload, session)]
+        case .completed, .failed:
+            []                                                  // terminal, and absorbing
+        }
     }
 
     // MARK: the loop

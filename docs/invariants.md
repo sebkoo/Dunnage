@@ -215,6 +215,18 @@ finishing, so each of these is an assertion about the budget as well.
 - `testAQuietTransferAndAnAnsweredInterruptionLeaveTheSameLog`
 - `testATransferThatAnswersInsideTheTimeoutIsNotQuiet`
 
+### An upload picked up from the log asks the authority before it sends anything
+
+Replay discards effects on purpose, so a state arriving from the log has no work attached to
+it and the driver needs a rule for what to do with one. The rule is the weakest effect each
+phase already produces on entry, and `send` is not among them: a driver that carried on from
+the log's last answer would send against an answer given before the process died, and the
+authority may well have moved past it.
+
+- `testAnUploadPickedUpFromTheLogAsksTheAuthorityBeforeItSendsAnything`
+- `testAnUploadPickedUpBeforeAnyTransportOperationOpensOneAndThenAsks`
+- `testAnUploadWithNothingOutstandingIsLeftAloneWhenItIsPickedUp`
+
 ### Phase 3's doubles keep the contracts they stand in for
 
 The clock is what makes every timing assertion in this phase deterministic, and the journal

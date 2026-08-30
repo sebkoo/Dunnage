@@ -312,3 +312,105 @@ final class DriverTimeoutTests: XCTestCase {
                        "and it lost the race, so it was never taken")
     }
 }
+
+/// `UploadTransition.replay` discards effects on purpose: re-emitting them would re-send
+/// bytes on every cold start. So a driver arriving at a state from the log has no work
+/// attached to it, and needs a rule for what to do with one.
+///
+/// The rule is the weakest effect each phase already produces on entry, and `send` is not on
+/// that list. See `docs/adr/0005-the-driver-and-the-clock-it-waits-behind.md` §6.
+final class DriverColdStartTests: XCTestCase {
+
+    // chunks 1...3, four bytes each
+    private var intent: UploadIntent {
+        UploadIntent(upload: UploadID("upload-d"),
+                     destination: DestinationRef("destination-d"),
+                     plan: ChunkPlan(totalBytes: 12, chunkSize: 4))
+    }
+
+    private let session = TransportSessionID("session-1")
+
+    private func transfer(_ ordinal: Int) -> PlannedTransfer {
+        let chunk = ChunkID(ordinal)
+        return PlannedTransfer(chunk: chunk, range: intent.plan.range(of: chunk)!)
+    }
+
+    private func held(_ chunks: Set<ChunkID>) -> Confirmation {
+        Confirmation(upload: intent.upload, session: session, progress: .chunks(chunks))
+    }
+
+    private func driver(_ transport: InMemoryTransportDouble,
+                        _ log: InMemoryEventLog) -> UploadDriver {
+        UploadDriver(transport: transport, log: log, clock: VirtualClock(),
+                     quietAfter: neverReached)
+    }
+
+    /// The log stops one answer earlier than the authority did: chunk 3's transfer landed,
+    /// and the process went away before the answer that would have said so.
+    ///
+    /// A driver that carried on from the log's last answer would send chunk 3 again — a
+    /// chunk the authority already holds, which is the thesis failing on a cold start. This
+    /// one asks first, and what it hears leaves nothing to send at all.
+    func testAnUploadPickedUpFromTheLogAsksTheAuthorityBeforeItSendsAnything() async throws {
+        let intent = self.intent
+        let transport = InMemoryTransportDouble(shape: .setShaped)
+        let opened = try await transport.openSession(for: intent)
+        XCTAssertEqual(opened, session)
+        for ordinal in 1...3 { _ = try await transport.send(transfer(ordinal), in: opened) }
+
+        let log = InMemoryEventLog()
+        try await log.append([.declared(intent),
+                              .transportSessionOpened(session),
+                              .authorityReported(held([ChunkID(1), ChunkID(2)]))],
+                             for: intent.upload)
+
+        let beforeResuming = await transport.calls.count
+        let state = try await driver(transport, log).resume(intent.upload)
+
+        let calls = await transport.calls
+        XCTAssertEqual(Array(calls[beforeResuming...]), [.asked(session), .finalized(session)],
+                       "it asked, and what it heard left nothing to send")
+        XCTAssertEqual(state, .completed(intent: intent))
+    }
+
+    /// The other phase a cold start can land in: declared, with no transport operation on
+    /// the log. It opens one — and still asks before it sends, because a fresh operation is
+    /// not assumed to hold nothing.
+    func testAnUploadPickedUpBeforeAnyTransportOperationOpensOneAndThenAsks() async throws {
+        let intent = self.intent
+        let transport = InMemoryTransportDouble(shape: .setShaped)
+        let log = InMemoryEventLog()
+        try await log.append([.declared(intent)], for: intent.upload)
+
+        let state = try await driver(transport, log).resume(intent.upload)
+
+        let calls = await transport.calls
+        XCTAssertEqual(Array(calls.prefix(2)), [.opened, .asked(session)],
+                       "the operation is opened, and then asked about, before anything goes out")
+        XCTAssertEqual(state, .completed(intent: intent))
+    }
+
+    /// Two states with nothing outstanding, and a driver that touches the transport for
+    /// neither. An upload the log has never seen is not an error, and a terminal one is
+    /// absorbing at the driver as well as in the fold.
+    func testAnUploadWithNothingOutstandingIsLeftAloneWhenItIsPickedUp() async throws {
+        let intent = self.intent
+        let transport = InMemoryTransportDouble(shape: .setShaped)
+        let log = InMemoryEventLog()
+        let driver = driver(transport, log)
+
+        let unknown = try await driver.resume(UploadID("upload-nobody-declared"))
+        XCTAssertEqual(unknown, .undeclared, "an upload the log never saw is not work")
+
+        try await log.append([.declared(intent),
+                              .transportSessionOpened(session),
+                              .authorityReported(held([ChunkID(1), ChunkID(2), ChunkID(3)])),
+                              .finalized],
+                             for: intent.upload)
+        let finished = try await driver.resume(intent.upload)
+        XCTAssertEqual(finished, .completed(intent: intent))
+
+        let calls = await transport.calls
+        XCTAssertEqual(calls, [], "and a finished upload is not work either")
+    }
+}
