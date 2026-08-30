@@ -196,7 +196,13 @@ records, idempotency state, or lifecycle tracking that S3 cannot serve efficient
 Not chosen today. Introducing a database before the need is demonstrated would be
 speculative.
 
-### O-3. UNVERIFIED — the published status of the IETF resumable upload specification
+### O-3. The published status of the IETF resumable upload specification
+
+**Checked 2026-08-29, against the IETF datatracker.** The paragraphs below record why it was
+left open, and the condition they name has since been met: the repository is public, so this
+document is quoted externally. `draft-ietf-httpbis-resumable-upload` is not an RFC. It is an
+active Internet-Draft in the HTTPbis working group, latest revision -12 dated 2026-07-06,
+IESG state "I-D Exists", intended status Proposed Standard. The citation stands as written.
 
 This ADR refers to the protocol as `draft-ietf-httpbis-resumable-upload`. Whether it has
 since been published as an RFC, and under what number, has not been verified in this
