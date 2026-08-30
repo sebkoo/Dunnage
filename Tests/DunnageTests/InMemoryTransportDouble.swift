@@ -51,6 +51,17 @@ actor InMemoryTransportDouble: UploadTransport {
         var finalized = false
     }
 
+    /// Every call the transport was asked to perform, in order.
+    ///
+    /// What a driver did, as the transport saw it. Recorded on entry, so a call that throws
+    /// or never answers is still a call that was made.
+    enum Call: Hashable, Sendable {
+        case opened
+        case sent(ChunkID)
+        case asked(TransportSessionID)
+        case finalized(TransportSessionID)
+    }
+
     let shape: AuthorityShape
     let durability: Durability
 
@@ -58,6 +69,13 @@ actor InMemoryTransportDouble: UploadTransport {
     private var nextSession = 1
     private var behaviors: [ChunkID: Behavior] = [:]
     private var defaultBehavior: Behavior = .succeed
+
+    /// Behaviours queued for a chunk's next sends, ahead of whatever it is scripted to do
+    /// standingly. A transport that answers differently on the second try is the ordinary
+    /// case, not an exotic one, and a driver that retries cannot be exercised without it.
+    private var queued: [ChunkID: [Behavior]] = [:]
+
+    private(set) var calls: [Call] = []
 
     /// Completion reports the transport has delivered, in order, duplicates included.
     private(set) var deliveredReports: [ChunkID] = []
@@ -71,6 +89,12 @@ actor InMemoryTransportDouble: UploadTransport {
 
     func script(_ behavior: Behavior, for chunk: ChunkID) { behaviors[chunk] = behavior }
     func scriptEverything(_ behavior: Behavior) { defaultBehavior = behavior; behaviors = [:] }
+
+    /// Answer this way once, on the next send of `chunk`, and then as before. Repeated
+    /// calls queue up in the order they were made.
+    func scriptOnce(_ behavior: Behavior, for chunk: ChunkID) {
+        queued[chunk, default: []].append(behavior)
+    }
 
     /// A network interruption: the connection dropped mid-transfer.
     ///
@@ -94,6 +118,7 @@ actor InMemoryTransportDouble: UploadTransport {
     // MARK: UploadTransport
 
     func openSession(for intent: UploadIntent) async throws -> TransportSessionID {
+        calls.append(.opened)
         let session = TransportSessionID("session-\(nextSession)")
         nextSession += 1
         sessions[session] = Session(intent: intent)
@@ -102,8 +127,9 @@ actor InMemoryTransportDouble: UploadTransport {
 
     func send(_ transfer: PlannedTransfer,
               in session: TransportSessionID) async throws -> TransferOutcome {
+        calls.append(.sent(transfer.chunk))
         guard var state = sessions[session] else { throw TransportError.unknownSession }
-        let behavior = behaviors[transfer.chunk] ?? defaultBehavior
+        let behavior = nextBehavior(for: transfer.chunk)
 
         switch behavior {
         case .stall:
@@ -134,6 +160,7 @@ actor InMemoryTransportDouble: UploadTransport {
     }
 
     func confirmedProgress(in session: TransportSessionID) async throws -> Confirmation {
+        calls.append(.asked(session))
         guard let state = sessions[session] else { throw TransportError.unknownSession }
 
         let progress: ConfirmedProgress
@@ -148,12 +175,24 @@ actor InMemoryTransportDouble: UploadTransport {
     }
 
     func finalize(_ session: TransportSessionID) async throws {
+        calls.append(.finalized(session))
         guard var state = sessions[session] else { throw TransportError.unknownSession }
         guard state.units == Set(state.intent.plan.chunks) else {
             throw TransportError.incompleteUpload
         }
         state.finalized = true
         sessions[session] = state
+    }
+
+    /// What this chunk does on this send: whatever is queued for it, else what it is
+    /// scripted to do standingly, else the default.
+    private func nextBehavior(for chunk: ChunkID) -> Behavior {
+        if var waiting = queued[chunk], !waiting.isEmpty {
+            let next = waiting.removeFirst()
+            queued[chunk] = waiting
+            return next
+        }
+        return behaviors[chunk] ?? defaultBehavior
     }
 
     /// How far a contiguous run from zero reaches. Spans above a gap are held but

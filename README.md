@@ -126,3 +126,15 @@ suit it. The named tests are in [`docs/invariants.md`](docs/invariants.md).
 - A torn tail is not an event, and replay stops before it rather than at it
 - Two uploads are never one ledger, however late in their identifiers they differ
 - The failure mode a completeness marker removes, kept working on purpose
+
+## Phase 3, invariant by invariant
+
+The driver: it executes Core's effects, records what a transport answered, and concludes
+nothing of its own. Every test here runs against a scripted double and a clock that moves
+only when a test moves it — no network, no real time. See
+`docs/adr/0005-the-driver-and-the-clock-it-waits-behind.md` for what that does and does not
+establish. The named tests are in [`docs/invariants.md`](docs/invariants.md).
+
+- A transport's answer becomes one event, on the log, before the next transfer begins
+- The wait a send has earned is honoured before the transfer, by the driver's own clock
+- Phase 3's doubles keep the contracts they stand in for

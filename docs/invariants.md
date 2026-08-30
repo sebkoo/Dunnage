@@ -169,3 +169,46 @@ ever stops losing this, the control has been broken.
 - `testTheMarkerlessLedgerKeepsTheContractItIsMeasuredAgainst`
 - `testALedgerWithNoCompletenessMarkerDerivesProgressNobodyConfirmed`
 - `testTheFramedLedgerAfterTheSameTornWriteDerivesOnlyWhatWasDurablyRecorded`
+
+## Phase 3, invariant by invariant
+
+The driver, and the clock it waits behind. See
+`docs/adr/0005-the-driver-and-the-clock-it-waits-behind.md`.
+
+Nothing in this phase touches a network or a real clock. What it establishes is that the
+driver keeps the contract ADR-0002 and ADR-0003 wrote for it before any of it existed; it
+establishes nothing about the world, and the ADR's honesty boundary says so at length.
+
+### A transport's answer becomes one event, on the log, before the next transfer begins
+
+The mapping adds nothing: a report, a refusal and an absent answer are three events, and no
+driver is allowed to make one of them out of another.
+
+The ordering is not tidiness. `Attempts` is derived from the log, so a refusal still in
+memory when the process goes away is an attempt that never happened — and an upload that
+dies on every attempt would then retry for ever, which is the failure a retry budget exists
+to stop.
+
+- `testEachOfTheThreeAnswersBecomesTheOneEventThatMeansIt`
+- `testAnAnswerIsOnTheLogBeforeTheNextTransferBegins`
+
+### The wait a send has earned is honoured before the transfer, by the driver's own clock
+
+`after` is a duration Core computed from the policy and the attempts already spent. The
+driver is the thing that waits, and this is the only place backoff exists.
+
+- `testTheWaitOnASendIsHonouredBeforeTheTransferAndByTheInjectedClock`
+- `testTheOnlyWaitsTheDriverTakesAreTheOnesTheEffectsCarried`
+
+### Phase 3's doubles keep the contracts they stand in for
+
+The clock is what makes every timing assertion in this phase deterministic, and the journal
+is what makes an ordering between two objects readable at all. A fake that quietly disagrees
+with the thing it replaces makes every test standing on it worthless.
+
+- `testTheVirtualClockLetsAWaitElapseOnlyWhenATestHasGrantedIt`
+- `testTheVirtualClockSpendsAGrantOnOneWaitAndNoMore`
+- `testTheVirtualClockAbandonsAWaitItsTaskNoLongerNeeds`
+- `testTheDoubleScriptedOnceAnswersThatWayOnceAndThenAsItWasBefore`
+- `testTheJournallingLogKeepsTheContractOfTheOneItWraps`
+- `testTheJournallingTransportAnswersExactlyWhatTheOneItWrapsAnswers`

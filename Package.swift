@@ -7,6 +7,7 @@ let package = Package(
     products: [
         .library(name: "DunnageCore", targets: ["DunnageCore"]),
         .library(name: "DunnageLedger", targets: ["DunnageLedger"]),
+        .library(name: "DunnageDriver", targets: ["DunnageDriver"]),
     ],
     targets: [
         // Pure. No networking, no disk, no clock, no randomness.
@@ -15,6 +16,10 @@ let package = Package(
         // The durable ledger. Core is pure, so the disk lives here and nowhere else.
         .target(name: "DunnageLedger", dependencies: ["DunnageCore"]),
 
-        .testTarget(name: "DunnageTests", dependencies: ["DunnageCore", "DunnageLedger"]),
+        // The driver. It executes Core's effects, so the clock lives here and nowhere else.
+        .target(name: "DunnageDriver", dependencies: ["DunnageCore"]),
+
+        .testTarget(name: "DunnageTests",
+                    dependencies: ["DunnageCore", "DunnageLedger", "DunnageDriver"]),
     ]
 )

@@ -198,7 +198,7 @@ final class TransitionTableTests: XCTestCase {
             return effects
         }
 
-        XCTAssertEqual(step(.declared(intent)), [.openTransportSession(intent.upload)])
+        XCTAssertEqual(step(.declared(intent)), [.openTransportSession(intent)])
         XCTAssertEqual(current.phase, .declared)
 
         XCTAssertEqual(step(.transportSessionOpened(session)),

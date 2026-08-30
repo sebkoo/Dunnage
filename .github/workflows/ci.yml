@@ -85,6 +85,7 @@ jobs:
           }
           check 1 9
           check 2 6
+          check 3 3
           exit $failed
 
   commit-message-hygiene:

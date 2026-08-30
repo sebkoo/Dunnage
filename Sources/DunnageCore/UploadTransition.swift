@@ -33,7 +33,13 @@ public enum RejectionReason: Hashable, Sendable {
 
 /// Work for the driver. Data, not behaviour.
 public enum UploadEffect: Hashable, Sendable {
-    case openTransportSession(UploadID)
+    /// Open a transport operation for this upload.
+    ///
+    /// It carries the whole intent rather than the identifier, because a transport is asked
+    /// to open an operation *for an intent* and a driver holding only an identifier cannot
+    /// perform this. An effect that has to be completed by reaching back into the state it
+    /// came from is not data a driver executes.
+    case openTransportSession(UploadIntent)
     case askAuthorityForConfirmedProgress(UploadID, TransportSessionID)
     /// Transfer these spans, no sooner than `after` from now.
     ///
@@ -74,7 +80,7 @@ public enum UploadTransition {
 
         case (.undeclared, .declared(let intent)):
             return .accepted(.declared(intent: intent),
-                             [.openTransportSession(intent.upload)])
+                             [.openTransportSession(intent)])
 
         case (.undeclared, .transportSessionOpened),
              (.undeclared, .chunkTransferReported),
