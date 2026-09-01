@@ -42,6 +42,14 @@ jobs:
       - name: Build and test
         run: swift build && swift test
 
+      # The LC_ALL=C pinned on the sort below is not decoration. sort orders by the
+      # locale's collation and -u deduplicates by it, so the locale decides not only the
+      # order of this file but which lines survive it: two byte-wise distinct names that
+      # collate equal under whatever locale a runner happens to have would leave one line,
+      # and no re-sorting downstream recovers a name already dropped. Pinned, the artifact
+      # is the same set of names whichever machine wrote it, and membership — not merely
+      # order — is what the guard that reads it is entitled to assume. Another job that
+      # uploads a list of names for that guard pins its own sort the same way.
       - name: Record the test names this runner has
         run: |
           set -u
@@ -72,6 +80,21 @@ jobs:
       # the names are written is free to change. What is enforced is that every name in
       # the suite appears somewhere in the file, and that nothing shaped like a test
       # name appears in the file which is not one.
+      #
+      # The two sides of the comparison are produced on two different machines — the
+      # suite's names are sorted and uploaded by a build job's runner, the document's are
+      # grepped here — and diff compares lines in order, so one set in two orders is a
+      # disagreement. Hence the pinned collation on both sorts below. It is what makes
+      # this guard independent of the producer: the artifact is a set, its order is not
+      # the producer's to guarantee, and this comparison must not depend on which machine
+      # wrote the file it reads. The producer pins its own sort as well, for a reason of
+      # its own — sort -u deduplicates by collation, so an unpinned producer would decide
+      # the artifact's membership and not merely its order.
+      #
+      # Sets, then, not sequences. The claims guard below compares its two lists in order
+      # deliberately, and says so; here the order carries nothing, and sorting both sides
+      # under one collation is what makes "the same names" a question two machines can
+      # answer the same way.
       - name: docs/invariants.md names the tests that exist
         run: |
           set -u
