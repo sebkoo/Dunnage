@@ -1,7 +1,9 @@
 # Invariant by invariant
 
-The named tests behind the invariants `README.md` states. CI fails if this list and the
-suite disagree in either direction, and if a claim is worded differently in the two files.
+The named tests behind the invariants `README.md` states. There are two suites now, on two
+runners — `swift test` and `vitest` — and this file names every test either of them has. CI
+reconciles the union of the two against this list and fails if they disagree in either
+direction, and fails as well if a claim is worded differently in the two files.
 
 ## Phase 1: Core — a chunk the authority has confirmed is never re-sent
 
@@ -278,3 +280,29 @@ broken and the real driver has nothing left to be measured against.
 - `testTheConcludingDriverKeepsTheContractItIsMeasuredAgainst`
 - `testADriverThatCallsAnInterruptionARefusalGivesUpOnAnUploadNothingRefused`
 - `testTheRealDriverAfterTheSameInterruptionsFinishesTheUpload`
+
+## Phase 4a: Control plane — it decides where a caller's bytes may land from the token it verified
+
+The control plane, and the half of phase 4 a reader can check with no AWS account. Nothing
+here is deployed: every test is a pure function or an assertion about a synthesised template,
+and no test in this phase is evidence about any AWS account. See
+`docs/adr/0006-the-control-plane-and-the-identity-it-composes.md`.
+
+These are the first tests in this file that `swift test` does not run. They are `vitest`, in
+`cloud/test/`, on a second runner.
+
+### A reference the caller supplies names a leaf inside its own prefix or it is refused, never repaired
+
+Refused, and not repaired into something acceptable. Sanitising maps two distinct references
+onto one key, and two uploads that the caller kept apart then become one object.
+
+The separator is the exclusion that carries weight beyond this phase. A `TransportSessionID`
+is `<ref> "/" <uploadId>`, and 4b's `parseSession` splits it on the first `/`; that parse is
+total only because no reference this server accepts contains one. Different language,
+different suite, different phase, and nothing a compiler or a test runner sees connects the
+two — so the rule lives in `docs/adr/0006-the-control-plane-and-the-identity-it-composes.md`
+§2, and `testARefContainingASeparatorIsRefused` is the only thing that enforces it.
+
+- `testARefThatIsNotALeafInTheCallersOwnPrefixIsRefusedRatherThanRepaired`
+- `testARefContainingASeparatorIsRefused`
+- `testARefAtTheGrammarsBoundariesIsAccepted`

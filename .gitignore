@@ -10,3 +10,4 @@ cdk.out/
 node_modules/
 .env
 swift-test-names.txt
+cloud/vitest-test-names.txt

@@ -147,3 +147,12 @@ establish. The named tests are in [`docs/invariants.md`](docs/invariants.md).
 - Giving up reaches the log because Core asked for it, and for no other reason
 - Phase 3's doubles keep the contracts they stand in for
 - The failure mode a driver that concludes reintroduces, kept working on purpose
+
+## Phase 4a: Control plane — it decides where a caller's bytes may land from the token it verified
+
+The control plane, and the half of phase 4 a reader can check with no AWS account. Nothing
+here is deployed: every test is a pure function or an assertion about a synthesised template,
+and no test in this phase is evidence about any AWS account. See
+`docs/adr/0006-the-control-plane-and-the-identity-it-composes.md`.
+
+- A reference the caller supplies names a leaf inside its own prefix or it is refused, never repaired

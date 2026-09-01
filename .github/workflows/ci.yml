@@ -8,22 +8,24 @@ on:
 permissions:
   contents: read
 
-# Three jobs rather than three steps in one. build-and-test and commit-message-hygiene
-# need different machines and different clones — Xcode against a shallow checkout, awk
-# against the whole history — and they assert unrelated things. A red suite must not hide
-# a fabricated attribution, or the reverse.
+# Four jobs rather than four steps in one. build-and-test, cloud-stack and
+# commit-message-hygiene need different machines and different clones — Xcode against a
+# shallow checkout, Node against a second one, awk against the whole history — and they
+# assert unrelated things. A red suite must not hide a fabricated attribution, or the
+# reverse.
 #
 # docs-agree holds the two doc guards. They are a job of their own for a different
 # reason: the name guard reconciles docs/invariants.md against the names the test runners
 # report, and the document names every test there is, whichever runner has it. The guard
 # therefore needs every runner's list at once, and a guard running inside a build job
 # sees only that job's own. Each build job uploads the names it has; docs-agree downloads
-# them and does the comparison.
+# them and does the comparison. There are two such jobs from this commit on, and the
+# comparison is against their union.
 #
-# It runs after build-and-test because it consumes that job's artifact, and for no other
+# It runs after both build jobs because it consumes their artifacts, and for no other
 # reason. needs: gates on success, so a failing build skips docs-agree entirely and a doc
-# that disagrees with the suite stays hidden behind the compile error until the build is
-# fixed. Moving the guards out did not decouple them from the build.
+# that disagrees with a suite stays hidden behind the compile error until the build is
+# fixed. Moving the guards out did not decouple them from the builds.
 jobs:
   build-and-test:
     name: build and test
@@ -60,48 +62,115 @@ jobs:
           name: swift-test-names
           path: swift-test-names.txt
 
+  cloud-stack:
+    name: cloud stack
+    # Pinned for the same reason. Nothing here needs macOS, and nothing here needs an AWS
+    # credential either: the handlers are pure functions and the tests never leave the
+    # runner.
+    runs-on: ubuntu-24.04
+    defaults:
+      run:
+        working-directory: cloud
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: cloud/package-lock.json
+
+      # --ignore-scripts because this is the one step in the phase that runs unaudited
+      # third-party code, on a runner holding a token. Nothing in the dependency set needs
+      # a lifecycle script: esbuild's platform binary arrives as an optional dependency
+      # and its shim resolves it (0.28.2, checked). If a future dependency does need one,
+      # that is a decision to take deliberately, in a commit that says which package and
+      # why.
+      #
+      # npm ci and not npm install: it installs the committed lockfile exactly and fails
+      # if package.json and the lockfile have drifted apart, which is the whole point of
+      # committing one.
+      - run: npm ci --ignore-scripts
+      - run: npm run typecheck
+      - run: npm test
+
+      # This is the other job the comment above build-and-test's producer names. LC_ALL=C
+      # is pinned here for that reason and no other: sort -u deduplicates by collation, so
+      # an unpinned sort here would decide which names survive into the artifact, and no
+      # re-sorting in docs-agree recovers a name already dropped.
+      #
+      # `vitest list` and not a grep over the sources: a source grep counts a skipped test
+      # as a real one, and the guard downstream would then be reconciling the document
+      # against tests nothing runs.
+      - name: Record the test names this runner has
+        run: |
+          set -u
+          npx vitest list | grep -oE 'test[A-Z][A-Za-z0-9_]*' | LC_ALL=C sort -u > vitest-test-names.txt
+          echo "$(wc -l < vitest-test-names.txt | tr -d '[:space:]') test names recorded"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: vitest-test-names
+          path: cloud/vitest-test-names.txt
+
   docs-agree:
     name: docs agree
     # Pinned for the same reason.
     runs-on: ubuntu-24.04
-    needs: [build-and-test]
+    needs: [build-and-test, cloud-stack]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
         with:
           name: swift-test-names
+      - uses: actions/download-artifact@v8
+        with:
+          name: vitest-test-names
 
-      # A doc that can drift from the suite is worse than a doc that names no tests at
+      # A doc that can drift from the suites is worse than a doc that names no tests at
       # all. Renaming a test fails this job until docs/invariants.md is updated; the
       # build itself still passes. That is the point of this step, not a side effect of
       # it.
       #
       # It greps the whole file, not one section of it, so where in docs/invariants.md
       # the names are written is free to change. What is enforced is that every name in
-      # the suite appears somewhere in the file, and that nothing shaped like a test
+      # either suite appears somewhere in the file, and that nothing shaped like a test
       # name appears in the file which is not one.
       #
-      # The two sides of the comparison are produced on two different machines — the
-      # suite's names are sorted and uploaded by a build job's runner, the document's are
-      # grepped here — and diff compares lines in order, so one set in two orders is a
-      # disagreement. Hence the pinned collation on both sorts below. It is what makes
-      # this guard independent of the producer: the artifact is a set, its order is not
-      # the producer's to guarantee, and this comparison must not depend on which machine
-      # wrote the file it reads. The producer pins its own sort as well, for a reason of
-      # its own — sort -u deduplicates by collation, so an unpinned producer would decide
-      # the artifact's membership and not merely its order.
+      # One document, two suites, one comparison. docs/invariants.md names every test
+      # there is, whichever runner has it, so the side it is compared against is the
+      # union of the lists the runners uploaded — not one list per runner. A per-runner
+      # comparison would fail every name the other runner owns.
+      #
+      # The sides of the comparison are produced on three different machines — each
+      # suite's names are sorted and uploaded by its own build job's runner, the
+      # document's are grepped here — and diff compares lines in order, so one set in two
+      # orders is a disagreement. Hence the pinned collation on every sort below. It is
+      # what makes this guard independent of its producers: an artifact is a set, its
+      # order is not the producer's to guarantee, and this comparison must not depend on
+      # which machine wrote the files it reads. Each producer pins its own sort as well,
+      # for a reason of its own — sort -u deduplicates by collation, so an unpinned
+      # producer would decide its artifact's membership and not merely its order.
       #
       # Sets, then, not sequences. The claims guard below compares its two lists in order
-      # deliberately, and says so; here the order carries nothing, and sorting both sides
-      # under one collation is what makes "the same names" a question two machines can
+      # deliberately, and says so; here the order carries nothing, and sorting every side
+      # under one collation is what makes "the same names" a question three machines can
       # answer the same way.
       - name: docs/invariants.md names the tests that exist
         run: |
           set -u
-          names=$(LC_ALL=C sort -u swift-test-names.txt)
+          # A runner that reported nothing produces an empty list, not an error, and an
+          # empty list unions away without trace: the guard would then be reconciling the
+          # document against the other runner alone and passing green. Each list has to
+          # be non-empty before it is used, and this is checked per file so one run names
+          # every runner that went silent.
+          empty=0
+          for f in swift-test-names.txt vitest-test-names.txt; do
+            [ -s "$f" ] || { echo "::error::$f is empty — a runner reported no test names, and an empty list unions away without trace"; empty=1; }
+          done
+          [ "$empty" -eq 0 ] || exit 1
+          names=$(cat swift-test-names.txt vitest-test-names.txt | LC_ALL=C sort -u)
           diff <(grep -oE 'test[A-Z][A-Za-z0-9_]*' docs/invariants.md | LC_ALL=C sort -u) <(printf '%s\n' "$names") \
-            || { echo "::error::docs/invariants.md and the suite disagree — '<' is in the doc only, '>' is in the suite only"; exit 1; }
-          echo "$(printf '%s\n' "$names" | wc -l) test names, docs/invariants.md and the suite agree"
+            || { echo "::error::docs/invariants.md and the suites disagree — '<' is in the doc only, '>' is in a suite only"; exit 1; }
+          echo "$(printf '%s\n' "$names" | wc -l) test names across both suites, docs/invariants.md and the suites agree"
 
       # Both files state the claims, and that duplication is deliberate: each has to be
       # readable on its own, and the claims are what makes either one readable. Nothing
@@ -143,6 +212,7 @@ jobs:
           check 1 9
           check 2 6
           check 3 7
+          check 4a 1
           exit $failed
 
   commit-message-hygiene:
