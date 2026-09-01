@@ -8,10 +8,22 @@ on:
 permissions:
   contents: read
 
-# Two jobs rather than two steps in one. They need different machines and different
-# clones — Xcode against a shallow checkout, awk against the whole history — and they
-# assert unrelated things. A red suite must not hide a fabricated attribution, or the
-# reverse.
+# Three jobs rather than three steps in one. build-and-test and commit-message-hygiene
+# need different machines and different clones — Xcode against a shallow checkout, awk
+# against the whole history — and they assert unrelated things. A red suite must not hide
+# a fabricated attribution, or the reverse.
+#
+# docs-agree holds the two doc guards. They are a job of their own for a different
+# reason: the name guard reconciles docs/invariants.md against the names the test runners
+# report, and the document names every test there is, whichever runner has it. The guard
+# therefore needs every runner's list at once, and a guard running inside a build job
+# sees only that job's own. Each build job uploads the names it has; docs-agree downloads
+# them and does the comparison.
+#
+# It runs after build-and-test because it consumes that job's artifact, and for no other
+# reason. needs: gates on success, so a failing build skips docs-agree entirely and a doc
+# that disagrees with the suite stays hidden behind the compile error until the build is
+# fixed. Moving the guards out did not decouple them from the build.
 jobs:
   build-and-test:
     name: build and test
@@ -30,9 +42,31 @@ jobs:
       - name: Build and test
         run: swift build && swift test
 
-      # A doc that can drift from the suite is worse than a doc that names no tests
-      # at all. Renaming a test breaks the build until docs/invariants.md is updated.
-      # That is the point of this step, not a side effect of it.
+      - name: Record the test names this runner has
+        run: |
+          set -u
+          swift test list | grep -oE 'test[A-Z][A-Za-z0-9_]*' | sort -u > swift-test-names.txt
+          echo "$(wc -l < swift-test-names.txt | tr -d '[:space:]') test names recorded"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: swift-test-names
+          path: swift-test-names.txt
+
+  docs-agree:
+    name: docs agree
+    # Pinned for the same reason.
+    runs-on: ubuntu-24.04
+    needs: [build-and-test]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: swift-test-names
+
+      # A doc that can drift from the suite is worse than a doc that names no tests at
+      # all. Renaming a test fails this job until docs/invariants.md is updated; the
+      # build itself still passes. That is the point of this step, not a side effect of
+      # it.
       #
       # It greps the whole file, not one section of it, so where in docs/invariants.md
       # the names are written is free to change. What is enforced is that every name in
@@ -41,7 +75,7 @@ jobs:
       - name: docs/invariants.md names the tests that exist
         run: |
           set -u
-          names=$(swift test list | grep -oE 'test[A-Z][A-Za-z0-9_]*' | sort -u)
+          names=$(cat swift-test-names.txt)
           diff <(grep -oE 'test[A-Z][A-Za-z0-9_]*' docs/invariants.md | sort -u) <(printf '%s\n' "$names") \
             || { echo "::error::docs/invariants.md and the suite disagree — '<' is in the doc only, '>' is in the suite only"; exit 1; }
           echo "$(printf '%s\n' "$names" | wc -l) test names, docs/invariants.md and the suite agree"
