@@ -101,10 +101,19 @@ jobs:
       # `vitest list` and not a grep over the sources: a source grep counts a skipped test
       # as a real one, and the guard downstream would then be reconciling the document
       # against tests nothing runs.
+      #
+      # It prints one line per test as `file > describe > test`, and only the last column
+      # is a test name. Hence the cut to that column before the grep. Grepping the whole
+      # line read the file and describe columns too and matched a test name in either of
+      # them: a describe block or a path component spelled `testSomething` would be
+      # recorded as a test, and docs-agree would then demand the document name a test that
+      # does not exist. Nothing here is spelled that way today, which is luck and not a
+      # property anyone maintains. Nested describes add columns rather than moving the
+      # test, so the last column is the test name however deep it is.
       - name: Record the test names this runner has
         run: |
           set -u
-          npx vitest list | grep -oE 'test[A-Z][A-Za-z0-9_]*' | LC_ALL=C sort -u > vitest-test-names.txt
+          npx vitest list | awk -F ' > ' '{print $NF}' | grep -oE 'test[A-Z][A-Za-z0-9_]*' | LC_ALL=C sort -u > vitest-test-names.txt
           echo "$(wc -l < vitest-test-names.txt | tr -d '[:space:]') test names recorded"
       - uses: actions/upload-artifact@v7
         with:
