@@ -9,3 +9,4 @@ xcuserdata/
 cdk.out/
 node_modules/
 .env
+swift-test-names.txt
