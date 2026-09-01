@@ -45,7 +45,7 @@ jobs:
       - name: Record the test names this runner has
         run: |
           set -u
-          swift test list | grep -oE 'test[A-Z][A-Za-z0-9_]*' | sort -u > swift-test-names.txt
+          swift test list | grep -oE 'test[A-Z][A-Za-z0-9_]*' | LC_ALL=C sort -u > swift-test-names.txt
           echo "$(wc -l < swift-test-names.txt | tr -d '[:space:]') test names recorded"
       - uses: actions/upload-artifact@v7
         with:
@@ -75,8 +75,8 @@ jobs:
       - name: docs/invariants.md names the tests that exist
         run: |
           set -u
-          names=$(cat swift-test-names.txt)
-          diff <(grep -oE 'test[A-Z][A-Za-z0-9_]*' docs/invariants.md | sort -u) <(printf '%s\n' "$names") \
+          names=$(LC_ALL=C sort -u swift-test-names.txt)
+          diff <(grep -oE 'test[A-Z][A-Za-z0-9_]*' docs/invariants.md | LC_ALL=C sort -u) <(printf '%s\n' "$names") \
             || { echo "::error::docs/invariants.md and the suite disagree — '<' is in the doc only, '>' is in the suite only"; exit 1; }
           echo "$(printf '%s\n' "$names" | wc -l) test names, docs/invariants.md and the suite agree"
 
