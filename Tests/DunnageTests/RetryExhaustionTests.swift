@@ -242,13 +242,14 @@ final class RetryExhaustionTests: XCTestCase {
         let hammeredInOneRound = opened
             + Array(repeating: UploadEvent.chunkTransferRefused(ChunkID(1)),
                     count: policy.maxAttemptsPerChunk * 2)
-        guard case .accepted(_, let stillGoing) = UploadTransition.apply(
+        if case .accepted(_, let stillGoing) = UploadTransition.apply(
                 .authorityReported(nothing), to: UploadTransition.replay(hammeredInOneRound)),
-              case .send(_, _, let wait)? = stillGoing.first else {
-            return XCTFail("one refusal delivered many times must not exhaust a budget")
+           case .send(_, _, let wait)? = stillGoing.first {
+            XCTAssertEqual(wait, policy.backoff(beforeAttempt: 2),
+                           "six deliveries of one refusal are one attempt, so the next send is the second")
+        } else {
+            XCTFail("one refusal delivered many times must not exhaust a budget")
         }
-        XCTAssertEqual(wait, policy.backoff(beforeAttempt: 2),
-                       "six deliveries of one refusal are one attempt, so the next send is the second")
 
         var acrossRounds = opened
         for _ in 1...policy.maxAttemptsPerChunk {
@@ -272,11 +273,12 @@ final class RetryExhaustionTests: XCTestCase {
         let transferring = UploadTransition.replay([.declared(intent),
                                                     .transportSessionOpened(session)])
 
-        guard case .rejected(let reason) =
-                UploadTransition.apply(.chunkTransferRefused(ChunkID(99)), to: transferring) else {
-            return XCTFail("a five-chunk plan has no chunk 99 to refuse")
+        if case .rejected(let reason) = UploadTransition.apply(
+                .chunkTransferRefused(ChunkID(99)), to: transferring) {
+            XCTAssertEqual(reason, .chunkIsNotInThisPlan)
+        } else {
+            XCTFail("a five-chunk plan has no chunk 99 to refuse")
         }
-        XCTAssertEqual(reason, .chunkIsNotInThisPlan)
 
         // Repeating it cannot exhaust anything, because it was never charged.
         let hammered = UploadTransition.replay(
