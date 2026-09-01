@@ -50,7 +50,8 @@ final class TornLedgerTests: XCTestCase {
                            "\(takenBack) bytes short: replay derived a state the log does not hold")
 
             guard case .transferring(let intent, _, let confirmed, _) = derived else {
-                return XCTFail("\(takenBack) bytes short: expected a transfer in flight")
+                XCTFail("\(takenBack) bytes short: expected a transfer in flight")
+                continue
             }
             XCTAssertNil(confirmed,
                          "\(takenBack) bytes short: the authority never answered, so nothing is confirmed")
