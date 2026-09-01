@@ -29,12 +29,13 @@ Core does not know whether confirmed progress is a contiguous byte offset or a s
 confirmed units. That meaning belongs to the transport contract, which is why the type is
 a sum type rather than a number.
 
-See [`docs/adr/0001-transport-boundary-and-confirmed-progress.md`](docs/adr/0001-transport-boundary-and-confirmed-progress.md),
-[`docs/adr/0002-interruption-is-not-a-failure.md`](docs/adr/0002-interruption-is-not-a-failure.md),
-[`docs/adr/0003-what-an-attempt-is-and-where-time-enters.md`](docs/adr/0003-what-an-attempt-is-and-where-time-enters.md),
-[`docs/adr/0004-the-on-disk-ledger-and-what-an-unreadable-record-does.md`](docs/adr/0004-the-on-disk-ledger-and-what-an-unreadable-record-does.md),
-[`docs/adr/0005-the-driver-and-the-clock-it-waits-behind.md`](docs/adr/0005-the-driver-and-the-clock-it-waits-behind.md), and
-[`docs/adr/0006-the-control-plane-and-the-identity-it-composes.md`](docs/adr/0006-the-control-plane-and-the-identity-it-composes.md).
+See [docs/adr/](docs/adr/):
+[ADR-0001, the transport boundary, and what "confirmed" means on each side of it](docs/adr/0001-transport-boundary-and-confirmed-progress.md),
+[ADR-0002, an interruption is not a failure](docs/adr/0002-interruption-is-not-a-failure.md),
+[ADR-0003, what an attempt is, and where time enters](docs/adr/0003-what-an-attempt-is-and-where-time-enters.md),
+[ADR-0004, the on-disk ledger, and what a record this binary cannot read does](docs/adr/0004-the-on-disk-ledger-and-what-an-unreadable-record-does.md),
+[ADR-0005, the driver, and the clock it waits behind](docs/adr/0005-the-driver-and-the-clock-it-waits-behind.md),
+and [ADR-0006, the control plane, and the identity it composes](docs/adr/0006-the-control-plane-and-the-identity-it-composes.md).
 
 ## Bird's-eye view
 
@@ -137,9 +138,8 @@ suit it. The named tests are in [`docs/invariants.md`](docs/invariants.md).
 The driver: it executes Core's effects, records what a transport answered, and concludes
 nothing of its own. Every test here runs against a scripted double and a clock that moves
 only when a test moves it — no network, no real time. See
-[`docs/adr/0005-the-driver-and-the-clock-it-waits-behind.md`](docs/adr/0005-the-driver-and-the-clock-it-waits-behind.md)
-for what that does and does not establish. The named tests are in
-[`docs/invariants.md`](docs/invariants.md).
+[ADR-0005](docs/adr/0005-the-driver-and-the-clock-it-waits-behind.md) for what that does and
+does not establish. The named tests are in [`docs/invariants.md`](docs/invariants.md).
 
 - A transport's answer becomes one event, on the log, before the next transfer begins
 - The wait a send has earned is honoured before the transfer, by the driver's own clock
@@ -154,6 +154,6 @@ for what that does and does not establish. The named tests are in
 The control plane, and the half of phase 4 a reader can check with no AWS account. Nothing
 here is deployed: every test is a pure function or an assertion about a synthesised template,
 and no test in this phase is evidence about any AWS account. See
-[`docs/adr/0006-the-control-plane-and-the-identity-it-composes.md`](docs/adr/0006-the-control-plane-and-the-identity-it-composes.md).
+[ADR-0006](docs/adr/0006-the-control-plane-and-the-identity-it-composes.md).
 
 - A reference the caller supplies names a leaf inside its own prefix or it is refused, never repaired

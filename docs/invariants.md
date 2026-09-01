@@ -50,7 +50,7 @@ whatsoever about 3.
 
 ### An interruption is not a failure, and a duplicate is not progress
 
-See [`docs/adr/0002-interruption-is-not-a-failure.md`](docs/adr/0002-interruption-is-not-a-failure.md).
+See [ADR-0002](docs/adr/0002-interruption-is-not-a-failure.md).
 
 - `testNetworkInterruptionMidChunk_LeavesTheChunkUnconfirmedNotFailed`
 - `testDuplicateConfirmation_IsIdempotentUnderReplay`
@@ -58,7 +58,7 @@ See [`docs/adr/0002-interruption-is-not-a-failure.md`](docs/adr/0002-interruptio
 
 ### Giving up is a decision, taken against a budget that says what an attempt is
 
-See [`docs/adr/0003-what-an-attempt-is-and-where-time-enters.md`](docs/adr/0003-what-an-attempt-is-and-where-time-enters.md).
+See [ADR-0003](docs/adr/0003-what-an-attempt-is-and-where-time-enters.md).
 
 - `testRetryExhaustion_IsADecisionThatPreservesConfirmedProgress`
 - `testInterruptionsNeverSpendTheRetryBudgetHoweverManyArrive`
@@ -94,7 +94,7 @@ of these ever stops losing its work, the control has been broken.
 ## Phase 2: Durable ledger — the log outlives the process that wrote it
 
 The durable ledger: a second implementation of `UploadEventLog`, backed by a file. See
-[`docs/adr/0004-the-on-disk-ledger-and-what-an-unreadable-record-does.md`](docs/adr/0004-the-on-disk-ledger-and-what-an-unreadable-record-does.md).
+[ADR-0004](docs/adr/0004-the-on-disk-ledger-and-what-an-unreadable-record-does.md).
 
 ### Every event has one written form on disk, and reading it back gives the event that was written
 
@@ -175,7 +175,7 @@ ever stops losing this, the control has been broken.
 ## Phase 3: Driver — it executes Core's effects and concludes nothing of its own
 
 The driver, and the clock it waits behind. See
-[`docs/adr/0005-the-driver-and-the-clock-it-waits-behind.md`](docs/adr/0005-the-driver-and-the-clock-it-waits-behind.md).
+[ADR-0005](docs/adr/0005-the-driver-and-the-clock-it-waits-behind.md).
 
 Nothing in this phase touches a network or a real clock. What it establishes is that the
 driver keeps the contract ADR-0002 and ADR-0003 wrote for it before any of it existed; it
@@ -286,7 +286,7 @@ broken and the real driver has nothing left to be measured against.
 The control plane, and the half of phase 4 a reader can check with no AWS account. Nothing
 here is deployed: every test is a pure function or an assertion about a synthesised template,
 and no test in this phase is evidence about any AWS account. See
-[`docs/adr/0006-the-control-plane-and-the-identity-it-composes.md`](docs/adr/0006-the-control-plane-and-the-identity-it-composes.md).
+[ADR-0006](docs/adr/0006-the-control-plane-and-the-identity-it-composes.md).
 
 These are the first tests in this file that `swift test` does not run. They are `vitest`, in
 `cloud/test/`, on a second runner.
@@ -301,8 +301,8 @@ is `<ref> "/" <uploadId>`, and 4b's `parseSession` splits it on the first `/`; t
 total only because no reference this server accepts contains one. Different language,
 different suite, different phase, and nothing a compiler or a test runner sees connects the
 two — so the rule lives in
-[`docs/adr/0006-the-control-plane-and-the-identity-it-composes.md`](docs/adr/0006-the-control-plane-and-the-identity-it-composes.md)
-§2, and `testARefContainingASeparatorIsRefused` is the only thing that enforces it.
+[ADR-0006](docs/adr/0006-the-control-plane-and-the-identity-it-composes.md) §2, and
+`testARefContainingASeparatorIsRefused` is the only thing that enforces it.
 
 - `testARefThatIsNotALeafInTheCallersOwnPrefixIsRefusedRatherThanRepaired`
 - `testARefContainingASeparatorIsRefused`
