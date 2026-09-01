@@ -67,6 +67,14 @@ written against the weaker one, and the gap recorded in an ADR.
   sabotage — compiler-enforced exhaustiveness, a property test over a correct pure
   helper — record why in one line and move on. Never manufacture a failure to satisfy
   the ritual.
+- A failing case never hides the cases after it. A test covering several cases reports on
+  every one of them, and so does a guard script covering several checks. The mechanism
+  differs by language and the rule does not: in XCTest a `return` inside a loop leaves the
+  method, so the iteration fails and continues instead; in a runner whose assertion
+  throws — vitest's `expect` — the cases that misbehaved are collected and one assertion
+  is made over the collection; in shell, a failed check sets a flag and the script carries
+  on. A red run is the evidence a commit rests on, and evidence naming one case of eight
+  is worse than evidence naming eight.
 - Deterministic only: virtual clock, no sleeps, no wall-clock waits, no timers.
 - CI must not require AWS access keys, SSO sessions, or stored cloud credentials for unit
   or contract validation. `swift test`, `cdk synth`, and contract tests run with none.
