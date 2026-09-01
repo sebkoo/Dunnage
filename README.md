@@ -29,13 +29,9 @@ Core does not know whether confirmed progress is a contiguous byte offset or a s
 confirmed units. That meaning belongs to the transport contract, which is why the type is
 a sum type rather than a number.
 
-See [docs/adr/](docs/adr/):
-[ADR-0001, the transport boundary, and what "confirmed" means on each side of it](docs/adr/0001-transport-boundary-and-confirmed-progress.md),
-[ADR-0002, an interruption is not a failure](docs/adr/0002-interruption-is-not-a-failure.md),
-[ADR-0003, what an attempt is, and where time enters](docs/adr/0003-what-an-attempt-is-and-where-time-enters.md),
-[ADR-0004, the on-disk ledger, and what a record this binary cannot read does](docs/adr/0004-the-on-disk-ledger-and-what-an-unreadable-record-does.md),
-[ADR-0005, the driver, and the clock it waits behind](docs/adr/0005-the-driver-and-the-clock-it-waits-behind.md),
-and [ADR-0006, the control plane, and the identity it composes](docs/adr/0006-the-control-plane-and-the-identity-it-composes.md).
+That boundary, and what "confirmed" means on each side of it, is
+[ADR-0001](docs/adr/0001-transport-boundary-and-confirmed-progress.md). The other
+decisions are in [docs/adr/](docs/adr/).
 
 ## Bird's-eye view
 
