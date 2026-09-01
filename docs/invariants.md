@@ -3,7 +3,7 @@
 The named tests behind the invariants `README.md` states. CI fails if this list and the
 suite disagree in either direction, and if a claim is worded differently in the two files.
 
-## Phase 1, invariant by invariant
+## Phase 1: Core — a chunk the authority has confirmed is never re-sent
 
 ### A chunk names a fixed span, and an authority's answer is read against that span
 
@@ -89,7 +89,7 @@ of these ever stops losing its work, the control has been broken.
 - `testWholeObjectTransportDouble_ResendsEveryByteAfterInterruption`
 - `testUnitHoldingAuthorityAfterTheSameInterruptionResendsOnlyWhatItNeverConfirmed`
 
-## Phase 2, invariant by invariant
+## Phase 2: Durable ledger — the log outlives the process that wrote it
 
 The durable ledger: a second implementation of `UploadEventLog`, backed by a file. See
 `docs/adr/0004-the-on-disk-ledger-and-what-an-unreadable-record-does.md`.
@@ -170,7 +170,7 @@ ever stops losing this, the control has been broken.
 - `testALedgerWithNoCompletenessMarkerDerivesProgressNobodyConfirmed`
 - `testTheFramedLedgerAfterTheSameTornWriteDerivesOnlyWhatWasDurablyRecorded`
 
-## Phase 3, invariant by invariant
+## Phase 3: Driver — it executes Core's effects and concludes nothing of its own
 
 The driver, and the clock it waits behind. See
 `docs/adr/0005-the-driver-and-the-clock-it-waits-behind.md`.

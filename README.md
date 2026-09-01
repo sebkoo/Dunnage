@@ -104,7 +104,7 @@ No percentages. A named invariant either exists or it does not.
 | **4. Transport, control plane and data plane** | The bound holds against a real transport: after an interruption, redundant transfer is bounded by the chunks that were in flight and unconfirmed. The device never holds an AWS credential, the server derives object ownership from the authenticated principal, and `cdk synth` runs with no cloud credentials. | not started |
 | **5. App** | The invariant survives real lifecycle events. A simulated process death is not a SIGKILL, and phase 1 does not claim otherwise. | not started |
 
-## Phase 1, invariant by invariant
+## Phase 1: Core — a chunk the authority has confirmed is never re-sent
 
 `swift test` runs all of them, with no AWS access key, no SSO session and no
 cloud configuration of any kind. The named tests behind them are in
@@ -120,7 +120,7 @@ cloud configuration of any kind. The named tests behind them are in
 - The doubles keep the contracts they stand in for
 - The failure mode the thesis claims to remove, kept working on purpose
 
-## Phase 2, invariant by invariant
+## Phase 2: Durable ledger — the log outlives the process that wrote it
 
 The second implementation of `UploadEventLog`, on a file. The protocol did not change to
 suit it. The named tests are in [`docs/invariants.md`](docs/invariants.md).
@@ -132,7 +132,7 @@ suit it. The named tests are in [`docs/invariants.md`](docs/invariants.md).
 - Two uploads are never one ledger, however late in their identifiers they differ
 - The failure mode a completeness marker removes, kept working on purpose
 
-## Phase 3, invariant by invariant
+## Phase 3: Driver — it executes Core's effects and concludes nothing of its own
 
 The driver: it executes Core's effects, records what a transport answered, and concludes
 nothing of its own. Every test here runs against a scripted double and a clock that moves

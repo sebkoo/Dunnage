@@ -124,8 +124,8 @@ jobs:
           check() {                        # check PHASE EXPECTED
             phase=$1; expected=$2
             readme=$(mktemp); doc=$(mktemp)
-            sed -n "/^## Phase $phase, invariant by invariant/,/^## /p" README.md          | sed -n 's/^- //p'   > "$readme"
-            sed -n "/^## Phase $phase, invariant by invariant/,/^## /p" docs/invariants.md | sed -n 's/^### //p' > "$doc"
+            sed -n "/^## Phase $phase: /,/^## /p" README.md          | sed -n 's/^- //p'   > "$readme"
+            sed -n "/^## Phase $phase: /,/^## /p" docs/invariants.md | sed -n 's/^### //p' > "$doc"
             rn=$(wc -l < "$readme" | tr -d '[:space:]')
             dn=$(wc -l < "$doc" | tr -d '[:space:]')
             if [ "$rn" -ne "$expected" ] || [ "$dn" -ne "$expected" ]; then
