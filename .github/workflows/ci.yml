@@ -52,10 +52,20 @@ jobs:
       # is the same set of names whichever machine wrote it, and membership — not merely
       # order — is what the guard that reads it is entitled to assume. Another job that
       # uploads a list of names for that guard pins its own sort the same way.
+      #
+      # It prints one line per test as `Module.ClassName/testName`, and only the last
+      # column is a test name. Hence the cut to that column before the grep. Grepping the
+      # whole line read the module and class columns too and matched a test name in either
+      # of them: a class or a module spelled `testSomething` would be recorded as a test,
+      # and docs-agree would then demand the document name a test that does not exist.
+      # Nothing here is spelled that way today, which is luck and not a property anyone
+      # maintains. The cut costs nothing in the other direction: a test name is a Swift
+      # identifier and a Swift identifier cannot contain a slash, so no real name can be
+      # truncated by it.
       - name: Record the test names this runner has
         run: |
           set -u
-          swift test list | grep -oE 'test[A-Z][A-Za-z0-9_]*' | LC_ALL=C sort -u > swift-test-names.txt
+          swift test list | awk -F/ '{print $NF}' | grep -oE 'test[A-Z][A-Za-z0-9_]*' | LC_ALL=C sort -u > swift-test-names.txt
           echo "$(wc -l < swift-test-names.txt | tr -d '[:space:]') test names recorded"
       - uses: actions/upload-artifact@v7
         with:
