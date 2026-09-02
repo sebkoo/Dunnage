@@ -360,9 +360,10 @@ equal to `BUCKET` alone and leaves the fake pair in the test file and nowhere el
 
 The bucket-policy assertion reads principals and not actions, and that boundary is deliberate.
 CDK's auto-delete-objects provider reaches the bucket through an `Allow` carrying `s3:List*`,
-which matches `s3:ListMultipartUploadParts`; whether that contests the wording of the claim
-about the enumeration permission is a question about actions, and it belongs to the claim that
-makes it.
+which matches `s3:ListMultipartUploadParts`; that is a question about actions, and the claim
+about the enumeration permission below is what answers it — the provider does hold that
+permission through that `Allow`, and claim 5's holder set names it as a role this stack
+defines and no device can become.
 
 What this does not establish: nothing here is deployed. The three template assertions cannot
 go red without sabotaging the stack — there is no identity pool to remove and no foreign
@@ -434,3 +435,45 @@ other three with it.
 - `testARefContainingASeparatorIsRefused`
 - `testARefAtTheGrammarsBoundariesIsAccepted`
 - `testAHandlerRefusesARefTheGrammarRejectsBeforeItActs`
+
+### The control plane holds nothing its routes do not use, and every principal that can enumerate parts is one this stack defines and no device can become
+
+Each of the four routes holds the permission its own S3 calls need, and no other. `create`
+calls `CreateMultipartUpload` and holds `s3:PutObject`; `parts` calls `ListParts` and holds
+`s3:ListMultipartUploadParts`; `complete` makes both calls and holds both; `urls` makes no S3
+call at all and holds `s3:PutObject`, because a presigned URL carries the authority of the
+principal that signed it and the device's PUT is made with the signing role's permission and
+never with one of its own. The claim says *use* rather than *call* for that reason. What the
+split buys is a property and not a saving: a function that only signs URLs, and one that only
+opens an operation, cannot enumerate anybody's parts. The abort case is the same clause at
+zero — no route aborts, so nothing in the template may, and what says so is a holder set that
+comes back empty rather than a string that fails to appear.
+
+The permission is looked for wherever a grant can live. A role holds an action through the
+statements attached to it — inline, or in an `AWS::IAM::Policy` that names it — and a
+principal holds one through the bucket policy's `Allow`, and the assertion reads both, with
+IAM's own wildcards expanded rather than matched as text. It has to: CDK's auto-delete-objects
+provider holds no S3 action in its role at all and reaches the bucket through an `Allow`
+carrying `s3:List*`, which matches `s3:ListMultipartUploadParts`, so a test that read roles
+would report four holders and pass while the claim was false of the template. The set asserted
+is exact rather than "no other holds it", because a negative passes when the scan reads
+nothing: no role in this template carries an inline `Policies` at all, so a reader that
+stopped there would return an empty set and report success having read none.
+
+"No device can become" is not re-proved here. Every principal in the holder set is a role this
+stack declares, and that every such role is assumable by an AWS service and by nothing else is
+what claim 2's `testEveryRoleInTheTemplateIsAssumableOnlyByAnAWSService` establishes. This
+claim rests on that one rather than repeating it.
+
+What this does not establish: nothing here is deployed, and a synthesised template is a
+document rather than evidence about any AWS account. `AWSLambdaBasicExecutionRole`'s contents
+are AWS's and are not in the template, so what a role holds through it is pinned by name
+instead of expanded — a role attaching any other managed policy reds the map rather than
+widening invisibly. And that `s3:PutObject` is the permission `CreateMultipartUpload`,
+`UploadPart` and `CompleteMultipartUpload` all require is
+[ADR-0006](adr/0006-the-control-plane-and-the-identity-it-composes.md) §6's statement of
+documented AWS behaviour, not something this phase executed.
+
+- `testEachFunctionRoleHoldsOnlyThePermissionsItsOwnRouteUses`
+- `testEveryPrincipalThatCanEnumeratePartsIsOneThisStackDefines`
+- `testNothingInThisTemplateMayAbortAMultipartUpload`

@@ -270,25 +270,36 @@ ADR rather than a runbook because a learning
 account with orphaned resources is how a free tier becomes a bill, and because step 1 is the
 step a reader would otherwise not know exists.
 
-**`s3:AbortMultipartUpload` is granted to no role in this stack.** Step 1 is an operator
-action taken with the account's own credentials, not an endpoint. No route in §4 aborts, and
-a permission held for an operation that does not exist is the speculative kind the
-architecture rules refuse. It arrives with the endpoint that needs it, if one ever does.
+**Nothing in this stack grants `s3:AbortMultipartUpload`** — not a role, and not the bucket
+policy. Step 1 is an operator action taken with the account's own credentials, not an
+endpoint. No route in §4 aborts, and a permission held for an operation that does not exist
+is the speculative kind the architecture rules refuse. It arrives with the endpoint that
+needs it, if one ever does. This sentence said "granted to no role" until commit 8, and "no
+role" names the place a grant was assumed to live rather than the property it is about: the
+auto-delete provider reaches this bucket through the bucket policy and not through its role,
+so an abort permission could arrive there exactly as `s3:List*` did.
 
 **This section is a precondition on 4b, not a note for later.** 4b creates the bucket that
 can hold an orphaned multipart upload. It must not deploy one before the procedure that
 removes it is written down — which is why this document is the first commit of the phase and
 not its last.
 
-Two things are UNVERIFIED here and are recorded rather than guessed away:
+One thing is UNVERIFIED here and is recorded rather than guessed away:
 
 - **That `DeleteBucket` fails while incomplete multipart uploads exist.** This is documented
   AWS behaviour. No account was touched, so it was not executed. The two-step teardown is
   correct under either answer, which is why this is recorded rather than chased.
-- **The IAM actions CDK grants the auto-delete provider's role.** They are not literals in
-  the vendored JavaScript and were not located from source. They become visible in the
-  synthesised template at the first synth, and claim 5's
-  `testListMultipartUploadPartsAppearsInNoOtherRole` reads that role anyway.
+
+**The IAM actions CDK grants the auto-delete provider are no longer unverified, and they are
+not where this section expected them.** The expectation recorded here was that they would
+become visible in the provider's role at the first synth, and that claim 5's test would read
+that role. The synth says otherwise: the provider's role carries `AWSLambdaBasicExecutionRole`
+and no S3 action at all, and its access to the bucket is the bucket policy's `Allow` of
+`s3:PutBucketPolicy`, `s3:GetBucket*`, `s3:List*` and `s3:DeleteObject*` on the bucket and its
+objects. `s3:List*` matches `s3:ListMultipartUploadParts`. A test that reads roles cannot see
+that grant at all, which is why claim 5's holder assertion reads identity policies and the
+bucket policy both, and why the name that stood in this paragraph is retired rather than
+renamed.
 
 Two further statements above are about S3 rather than about the handler: that
 `listObjectVersions` does not enumerate uploaded parts, and that `s3:PutObject` is the
@@ -369,6 +380,41 @@ what it replaced; a spec is owed the same.
   and `docs/invariants.md`.
 - **§7's one-command teardown is replaced by §6 above.** §11 named the condition under which
   it would be wrong; the read of the vendored handler in §6 found that it is.
+- **§8's wording of claim 5 is replaced, and one of its two clauses is dropped rather than
+  reworded.** "The control plane holds the only credential, and the only enumeration
+  permission" is false of the template in its second half: with `autoDeleteObjects: true` the
+  bucket policy grants CDK's auto-delete provider `s3:List*`, which matches
+  `s3:ListMultipartUploadParts`, so the control plane does not hold the only enumeration
+  permission. What is true, and stronger than the spec's absolute, is that every principal
+  holding it is one this stack defines and that no device can become one. The first clause —
+  *the control plane holds the only credential* — is dropped rather than reworded, because it
+  has no test of its own: its evidence is `testTheStackDeclaresNoIdentityPool` and
+  `testEveryRoleInTheTemplateIsAssumableOnlyByAnAWSService`, both listed under claim 2, and a
+  clause whose only evidence is listed under another claim is one the parity guard cannot
+  see — that guard compares names to names. Listing either name twice would make one test the
+  evidence for two claims with nothing reconciling the two listings. The property is not
+  abandoned; it is claim 2's and it stays there. The claim becomes, and this is the wording
+  that reaches `README.md` and `docs/invariants.md`:
+
+  > The control plane holds nothing its routes do not use, and every principal that can
+  > enumerate parts is one this stack defines and no device can become
+
+- **§6's Lambda-role sentence is replaced.** "the Lambda role holds `s3:PutObject` and
+  `s3:ListMultipartUploadParts` on `<bucket>/uploads/*`" names one role where the template
+  declares four, one per route in §4 above, and after commit 8 no role holds both actions
+  except `Complete`, which is the only route that calls both `ListParts` and
+  `CompleteMultipartUpload`. `Create` and `Urls` hold `s3:PutObject`; `Parts` holds
+  `s3:ListMultipartUploadParts`. What is **not** superseded is the resource: each of the four
+  statements is scoped to `<bucket>/uploads/*`, not `s3:*` and not `<bucket>/*`, exactly as
+  the spec has it.
+- **Not a supersession, but a slip worth naming:** §6's last bullet,
+  "`s3:ListMultipartUploadParts` appears in no other role in the template", is true and is
+  not sufficient. It appears in the `Parts` and `Complete` roles' attached policies and in
+  no other role — and the permission is also held outside every role, through the bucket
+  policy's `Allow` to the auto-delete provider. A reader who implements that bullet writes
+  a test that reads roles, watches it pass, and believes the claim proved. Nothing here is
+  decided differently from the spec; the bullet is named because a reader who stops at it
+  stops one grant short.
 - **Not a supersession, but a slip worth naming:** §3.2's heading reads "Splitting on the
   first separator, and **the two** malformed cases", while its own body says "exactly three
   malformed inputs" and then lists three. Three is right and §2 above agrees with the spec's

@@ -53,37 +53,42 @@ export class DunnageStack extends Stack {
 
     // An explicit statement rather than `bucket.grantPut()`. The grant helper expands to
     // aws-cdk-lib's BUCKET_PUT_ACTIONS, which includes `s3:Abort*`, and ADR-0006 §6 states
-    // that `s3:AbortMultipartUpload` is granted to no role in this stack: no route aborts,
-    // and a permission held for an operation that does not exist is the speculative kind the
+    // that nothing in this stack grants `s3:AbortMultipartUpload`: no route aborts, and a
+    // permission held for an operation that does not exist is the speculative kind the
     // architecture rules refuse. `s3:PutObject` is what `CreateMultipartUpload`, `UploadPart`
-    // and `CompleteMultipartUpload` all require, and `s3:ListMultipartUploadParts` is the
-    // enumeration permission the control plane keeps.
+    // and `CompleteMultipartUpload` all require, and `s3:ListMultipartUploadParts` is what
+    // `ListParts` requires.
+    //
+    // Each route names the actions it uses, at its own call site, so a reader of
+    // `route('Parts', …)` sees what `Parts` holds without following a table. `create` calls
+    // `CreateMultipartUpload`, `parts` calls `ListParts`, `complete` calls both, and `urls`
+    // calls nothing at all. That is a property rather than a saving: a function that only
+    // signs URLs, and one that only opens an operation, cannot enumerate anybody's parts.
     //
     // A fresh statement per function rather than one object added to four roles: a policy
     // statement is mutable, and one shared instance makes four roles a single object four
-    // constructs hold a reference to.
+    // constructs hold a reference to. The four statements differ now, which makes the reason
+    // obvious where it used to be a precaution.
     //
-    // The `Urls` function makes no S3 call of its own and still needs `s3:PutObject`. A
+    // The `Urls` function makes no S3 call of its own and still holds `s3:PutObject`. A
     // presigned URL carries the authority of the principal that signed it, so the PUT a device
     // makes is made with this role's permission and never with one of its own — which is the
-    // whole of claim 2's first half. It also receives `s3:ListMultipartUploadParts`, which it
-    // does not use, because one statement serves all four functions; whether the enumeration
-    // permission should be narrower than the control plane is claim 5's question and commit
-    // 8's to answer.
-    const uploadsGrant = (): PolicyStatement =>
+    // whole of claim 2's first half, and why claim 5 says a route *uses* a permission rather
+    // than calls with it.
+    const uploadsGrant = (actions: readonly string[]): PolicyStatement =>
       new PolicyStatement({
-        actions: ['s3:PutObject', 's3:ListMultipartUploadParts'],
+        actions: [...actions],
         resources: [bucket.arnForObjects('uploads/*')],
       })
 
-    const route = (id: string, entryPoint: string): LambdaFunction => {
+    const route = (id: string, entryPoint: string, actions: readonly string[]): LambdaFunction => {
       const fn = new LambdaFunction(this, `${id}Function`, {
         runtime: Runtime.NODEJS_24_X,
         handler: `${entryPoint}.handler`,
         code,
         environment: { [BUCKET_VARIABLE]: bucket.bucketName },
       })
-      fn.addToRolePolicy(uploadsGrant())
+      fn.addToRolePolicy(uploadsGrant(actions))
       return fn
     }
 
@@ -104,22 +109,34 @@ export class DunnageStack extends Stack {
     api.addRoutes({
       path: '/uploads',
       methods: [HttpMethod.POST],
-      integration: new HttpLambdaIntegration('CreateIntegration', route('Create', 'create')),
+      integration: new HttpLambdaIntegration(
+        'CreateIntegration',
+        route('Create', 'create', ['s3:PutObject']),
+      ),
     })
     api.addRoutes({
       path: '/uploads/{ref}/urls',
       methods: [HttpMethod.POST],
-      integration: new HttpLambdaIntegration('UrlsIntegration', route('Urls', 'urls')),
+      integration: new HttpLambdaIntegration(
+        'UrlsIntegration',
+        route('Urls', 'urls', ['s3:PutObject']),
+      ),
     })
     api.addRoutes({
       path: '/uploads/{ref}/parts',
       methods: [HttpMethod.GET],
-      integration: new HttpLambdaIntegration('PartsIntegration', route('Parts', 'parts')),
+      integration: new HttpLambdaIntegration(
+        'PartsIntegration',
+        route('Parts', 'parts', ['s3:ListMultipartUploadParts']),
+      ),
     })
     api.addRoutes({
       path: '/uploads/{ref}/complete',
       methods: [HttpMethod.POST],
-      integration: new HttpLambdaIntegration('CompleteIntegration', route('Complete', 'complete')),
+      integration: new HttpLambdaIntegration(
+        'CompleteIntegration',
+        route('Complete', 'complete', ['s3:ListMultipartUploadParts', 's3:PutObject']),
+      ),
     })
 
     // Applied at the stack rather than at the app. Every template assertion in this phase is

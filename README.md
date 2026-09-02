@@ -157,3 +157,4 @@ phase is evidence about any AWS account. See
 - A device holds no principal and no standing grant on the bucket: each authority it does hold names one operation on one part, and expires
 - The object key is derived from the authenticated principal, and a field the client sends never reaches it
 - A reference the caller supplies names a leaf inside its own prefix or it is refused, never repaired
+- The control plane holds nothing its routes do not use, and every principal that can enumerate parts is one this stack defines and no device can become
