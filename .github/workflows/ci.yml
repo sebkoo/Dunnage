@@ -101,7 +101,52 @@ jobs:
       # committing one.
       - run: npm ci --ignore-scripts
       - run: npm run typecheck
+
+      # Before the tests, because the suite reads a synthesised template and synthesising one
+      # stages the Lambda asset out of dist/handlers — a directory only this step writes. It
+      # is not needed before the name-recording step below: `vitest list` imports the test
+      # files to collect them and constructs no stack, which holds only because
+      # `Template.fromStack` is called inside the tests and never at module scope.
+      #
+      # It also compiles bin/dunnage.ts to dist/app.js, which is what cdk.json runs. There is
+      # no TypeScript loader in the dependency set: ts-node cannot run under the pinned
+      # typescript 7.0.2 — TypeScript 7's main entry no longer exposes the legacy compiler
+      # API, so ts-node throws during bootstrap — and the app is compiled by the esbuild that
+      # already builds the handlers rather than by a loader added for the purpose. The app
+      # bundle is --packages=external, so aws-cdk-lib is required from node_modules and its
+      # vendored custom-resource handlers still resolve relative to their own __dirname.
+      - run: npm run build
       - run: npm test
+
+      # The two steps below are claim 1's, and each defends a property that fails quietly.
+      #
+      # The first is a guard, not a negative control: cdk.context.json is a cached answer to a
+      # question that needed a credential once, so its presence means a synth resolved
+      # something from an account. A file-absence assertion demonstrates nothing failing, and
+      # this phase's negative control is claim 6.
+      #
+      # The second synthesises with the AWS environment scrubbed rather than merely absent.
+      # This runner holds no credential today, so a bare synth would pass for that reason and
+      # keep passing for a different one the day the job gains OIDC. AWS_ROLE_ARN and
+      # AWS_WEB_IDENTITY_TOKEN_FILE are the two that matter: they are how a runner starts
+      # resolving an identity without anyone editing this file.
+      - name: No context file — a synth that needed a credential once and cached the answer
+        run: |
+          set -u
+          test ! -e cdk.context.json \
+            || { echo "::error::cloud/cdk.context.json exists — a synth resolved something from an account"; exit 1; }
+          echo "no cdk.context.json: nothing here resolved anything from an account"
+      - name: Synthesise with the AWS environment scrubbed, not merely absent
+        run: |
+          set -u
+          env -u AWS_ACCESS_KEY_ID -u AWS_SECRET_ACCESS_KEY -u AWS_SESSION_TOKEN \
+              -u AWS_PROFILE -u AWS_REGION -u AWS_DEFAULT_REGION \
+              -u AWS_ROLE_ARN -u AWS_WEB_IDENTITY_TOKEN_FILE \
+              -u CDK_DEFAULT_ACCOUNT -u CDK_DEFAULT_REGION \
+              AWS_EC2_METADATA_DISABLED=true AWS_CONFIG_FILE=/dev/null \
+              AWS_SHARED_CREDENTIALS_FILE=/dev/null \
+              npx cdk synth --no-lookups > "$RUNNER_TEMP/scrubbed.yaml"
+          echo "$(wc -c < "$RUNNER_TEMP/scrubbed.yaml") bytes synthesised with the AWS environment scrubbed"
 
       # This is the other job the comment above build-and-test's producer names. LC_ALL=C
       # is pinned here for that reason and no other: sort -u deduplicates by collation, so
@@ -231,7 +276,7 @@ jobs:
           check 1 9
           check 2 6
           check 3 7
-          check 4a 2
+          check 4a 3
           exit $failed
 
   commit-message-hygiene:

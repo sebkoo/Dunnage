@@ -292,6 +292,44 @@ phase is evidence about any AWS account. See
 These are the first tests in this file that `swift test` does not run. They are `vitest`, in
 `cloud/test/`, on a second runner.
 
+### The stack synthesises with no account, no region and no credential, and nothing it does can quietly acquire one
+
+The stack declares no `env`, so its account and region are unresolved tokens and the template
+names no environment. Nothing in the template is a twelve-digit account written out, no source
+under `bin/`, `lib/` or `handlers/` calls `fromLookup` or reaches a `ContextProvider`, and
+every `AWS::Lambda::Function` reads its code from a prebuilt S3 asset rather than from
+anything assembled while `cdk` was running. `NodejsFunction` is refused for that reason: it
+bundles at synth time with local esbuild when present and Docker when not, which would make
+the property depend on what happens to be installed on the machine. The JWT issuer is the
+user pool's own `ProviderURL` attribute, resolved by CloudFormation at deploy, and not a
+region this repository wrote down.
+
+The source scan reads code and not prose. `lib/stack.ts` explains in its comments why it
+refuses `NodejsFunction` and what a `fromLookup` would cost, and a scan over raw text reads
+that explanation as the violation it warns against; comments are stripped before anything is
+matched, so the assertion is about what a source does. Weakening the pattern until it stopped
+matching, or deleting the explanation, would each have turned a passing test into a worse
+document.
+
+The last of the five is not about credentials at all. It reconciles the environment variable
+name the stack sets against the one the three handlers read, because nothing in this phase
+deploys and a stack setting `BUCKET_NAME` beside handlers reading `BUCKET` would synthesise
+green and fail at the first real request in 4b.
+
+What this does not establish: nothing here is deployed, and a synthesised template is a
+document rather than evidence about any AWS account. CI synthesises again with the AWS
+environment scrubbed rather than merely absent, so a runner that later gains OIDC does not
+start passing for a different reason — and, honestly, that scrubbing is not load-bearing
+today: with no credential anywhere on this machine the scrubbed template is byte-identical to
+the bare one. `--no-lookups` is the guard against a `fromLookup` arriving later, not a thing
+doing work now.
+
+- `testTheStackSynthesisesWithNoAccountNoRegionAndNoCredential`
+- `testTheStackDeclaresNoEnvironmentAndLooksNothingUp`
+- `testTheLambdaCodeIsAPrebuiltAssetAndNothingBundlesDuringSynth`
+- `testTheJWTIssuerRendersAsATokenAndNotALiteralRegion`
+- `testEveryHandlerFunctionIsHandedTheBucketUnderTheNameItsHandlerReads`
+
 ### The object key is derived from the authenticated principal, and a field the client sends never reaches it
 
 The key is `uploads/<sub>/<ref>`, and the `sub` in it comes from the verified token and from
