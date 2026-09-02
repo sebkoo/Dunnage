@@ -75,8 +75,8 @@ jobs:
   cloud-stack:
     name: cloud stack
     # Pinned for the same reason. Nothing here needs macOS, and nothing here needs an AWS
-    # credential either: the handlers are pure functions and the tests never leave the
-    # runner.
+    # credential either: what a test reaches is a pure function or the path a handler takes
+    # before it constructs a client, and nothing in this job leaves the runner.
     runs-on: ubuntu-24.04
     defaults:
       run:
@@ -231,7 +231,7 @@ jobs:
           check 1 9
           check 2 6
           check 3 7
-          check 4a 1
+          check 4a 2
           exit $failed
 
   commit-message-hygiene:

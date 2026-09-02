@@ -148,8 +148,10 @@ does not establish. The named tests are in [`docs/invariants.md`](docs/invariant
 ## Phase 4a: Control plane — it decides where a caller's bytes may land from the token it verified
 
 The control plane, and the half of phase 4 a reader can check with no AWS account. Nothing
-here is deployed: every test is a pure function or an assertion about a synthesised template,
-and no test in this phase is evidence about any AWS account. See
+here is deployed: every test reaches a pure function, an assertion about a synthesised
+template, or the path a handler takes before it constructs a client — and no test in this
+phase is evidence about any AWS account. See
 [ADR-0006](docs/adr/0006-the-control-plane-and-the-identity-it-composes.md).
 
+- The object key is derived from the authenticated principal, and a field the client sends never reaches it
 - A reference the caller supplies names a leaf inside its own prefix or it is refused, never repaired

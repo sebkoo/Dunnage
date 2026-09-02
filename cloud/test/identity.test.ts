@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { validateRef } from '../handlers/identity'
+import { objectKey, validateRef } from '../handlers/identity'
 
 describe('validateRef', () => {
   // One assertion over every case, not an assertion inside a loop. `expect` throws, so a
@@ -23,5 +23,15 @@ describe('validateRef', () => {
   test('testARefAtTheGrammarsBoundariesIsAccepted', () => {
     const refs = ['a', '0', 'x'.repeat(64), 'a.b_c-1']
     expect(refs.filter(ref => !validateRef(ref))).toEqual([])
+  })
+})
+
+describe('objectKey', () => {
+  // Two parameters, and the claim is what is absent from them. There is no third parameter
+  // a request body could arrive through, so the key cannot be composed out of anything the
+  // client chose except the reference — which claim 4's grammar has already refused if it
+  // is not a leaf in this caller's own prefix.
+  test('testTheObjectKeyIsDerivedFromTheVerifiedPrincipalAndTheRefAlone', () => {
+    expect(objectKey('sub-1', 'photo.jpg')).toBe('uploads/sub-1/photo.jpg')
   })
 })

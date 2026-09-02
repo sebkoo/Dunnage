@@ -284,12 +284,38 @@ broken and the real driver has nothing left to be measured against.
 ## Phase 4a: Control plane — it decides where a caller's bytes may land from the token it verified
 
 The control plane, and the half of phase 4 a reader can check with no AWS account. Nothing
-here is deployed: every test is a pure function or an assertion about a synthesised template,
-and no test in this phase is evidence about any AWS account. See
+here is deployed: every test reaches a pure function, an assertion about a synthesised
+template, or the path a handler takes before it constructs a client — and no test in this
+phase is evidence about any AWS account. See
 [ADR-0006](docs/adr/0006-the-control-plane-and-the-identity-it-composes.md).
 
 These are the first tests in this file that `swift test` does not run. They are `vitest`, in
 `cloud/test/`, on a second runner.
+
+### The object key is derived from the authenticated principal, and a field the client sends never reaches it
+
+The key is `uploads/<sub>/<ref>`, and the `sub` in it comes from the verified token and from
+nowhere else. A body naming a `key`, a `sub` or a `userId` produces the key a body without
+them produces — not because a handler strips those fields, but because `objectKey(sub, ref)`
+has no third parameter one of them could arrive through, and `verifiedSub` is the only
+function in the service that reads a principal. A check can be omitted at one of four call
+sites; a parameter that does not exist cannot be passed at any of them.
+
+A token carrying no `sub` claim is refused with a 401. There is no default principal and no
+empty prefix to fall back to: an empty prefix is a place one caller's reference reaches
+another caller's object, so two callers deliberately kept apart would land on one.
+
+What happens after the S3 call carries no test here, and nothing is faked to make it look
+tested. A stubbed `S3Client` would be a double of a vendor's product rather than of a
+contract this repository states, so writing one would encode a guess about AWS and then run
+the guess against itself. 4b's recorded contract run against a real bucket is what checks
+that half, and
+[ADR-0006](docs/adr/0006-the-control-plane-and-the-identity-it-composes.md) §4 names the four
+observations that would falsify these handlers.
+
+- `testTheObjectKeyIsDerivedFromTheVerifiedPrincipalAndTheRefAlone`
+- `testARequestBodyNamingAKeyOrASubProducesTheSameKeyAsOneWithout`
+- `testAMissingSubClaimIsRefusedRatherThanDefaulted`
 
 ### A reference the caller supplies names a leaf inside its own prefix or it is refused, never repaired
 
@@ -304,6 +330,14 @@ two — so the rule lives in
 [ADR-0006](docs/adr/0006-the-control-plane-and-the-identity-it-composes.md) §2, and
 `testARefContainingASeparatorIsRefused` is the only thing that enforces it.
 
+The grammar is also what a handler applies before it acts. Each of the three handlers
+written so far answers 400 to a reference of `../etc` without constructing a client, which
+is why a test about a server runs on a machine holding no credential at all.
+`testAHandlerRefusesARefTheGrammarRejectsBeforeItActs` is filed under this claim rather than
+under claim 3 because what it refuses is this grammar; that it refuses before it acts is the
+other half of the same decision.
+
 - `testARefThatIsNotALeafInTheCallersOwnPrefixIsRefusedRatherThanRepaired`
 - `testARefContainingASeparatorIsRefused`
 - `testARefAtTheGrammarsBoundariesIsAccepted`
+- `testAHandlerRefusesARefTheGrammarRejectsBeforeItActs`
