@@ -154,5 +154,6 @@ phase is evidence about any AWS account. See
 [ADR-0006](docs/adr/0006-the-control-plane-and-the-identity-it-composes.md).
 
 - The stack synthesises with no account, no region and no credential, and nothing it does can quietly acquire one
+- A device holds no principal and no standing grant on the bucket: each authority it does hold names one operation on one part, and expires
 - The object key is derived from the authenticated principal, and a field the client sends never reaches it
 - A reference the caller supplies names a leaf inside its own prefix or it is refused, never repaired

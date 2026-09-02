@@ -312,9 +312,11 @@ matching, or deleting the explanation, would each have turned a passing test int
 document.
 
 The last of the five is not about credentials at all. It reconciles the environment variable
-name the stack sets against the one the three handlers read, because nothing in this phase
+name the stack sets against the one the four handlers read, because nothing in this phase
 deploys and a stack setting `BUCKET_NAME` beside handlers reading `BUCKET` would synthesise
-green and fail at the first real request in 4b.
+green and fail at the first real request in 4b. What it asserts is the whole set of names the
+handlers read rather than the presence of the one it is looking for, so a handler that began
+reading a second variable would be reported instead of passed over.
 
 What this does not establish: nothing here is deployed, and a synthesised template is a
 document rather than evidence about any AWS account. CI synthesises again with the AWS
@@ -329,6 +331,53 @@ doing work now.
 - `testTheLambdaCodeIsAPrebuiltAssetAndNothingBundlesDuringSynth`
 - `testTheJWTIssuerRendersAsATokenAndNotALiteralRegion`
 - `testEveryHandlerFunctionIsHandedTheBucketUnderTheNameItsHandlerReads`
+
+### A device holds no principal and no standing grant on the bucket: each authority it does hold names one operation on one part, and expires
+
+The device holds a JWT and never an AWS credential. There is a user pool and an app client and
+no identity pool, which is the stronger form of the claim rather than a narrower one: an
+identity pool is the only thing in Cognito that exchanges a token for AWS credentials, so
+without one there is no role a device could assume at all. Every role the template declares is
+assumable by an AWS service and by nothing else — a `Federated` principal is how a web
+identity becomes an assumable role and an `AWS` principal is how an account or a user does,
+and neither appears in a trust policy here — and every `Allow` on the bucket names a role this
+stack defines, so nothing outside the stack holds a standing grant on it.
+
+What a device is handed instead is one signed request per part. The control plane signs it
+with its own role's authority, so the PUT a device makes carries a permission the device
+itself never holds. Each URL names one key, one uploadId, one part number and one operation,
+and carries an `X-Amz-Expires`, so it stops working on its own. Two parts of one upload are
+two URLs that differ in the part number and in the signature that covers it and in nothing
+else. The claim states what each authority is scoped to and says nothing about how many of
+them there are, because a five-part upload hands out five.
+
+The URLs are signed offline. The presigner builds a canonical request and an HMAC chain out of
+the credentials it is handed and reaches no network, so both tests run on a machine holding no
+AWS credential and touching no bucket, with obviously-fake placeholders standing in for a key
+pair. `handlers/urls.ts` names no credential and no region of its own — `signPartUrl` takes an
+already-built client — which is what keeps the set of environment variables the handlers read
+equal to `BUCKET` alone and leaves the fake pair in the test file and nowhere else.
+
+The bucket-policy assertion reads principals and not actions, and that boundary is deliberate.
+CDK's auto-delete-objects provider reaches the bucket through an `Allow` carrying `s3:List*`,
+which matches `s3:ListMultipartUploadParts`; whether that contests the wording of the claim
+about the enumeration permission is a question about actions, and it belongs to the claim that
+makes it.
+
+What this does not establish: nothing here is deployed. The three template assertions cannot
+go red without sabotaging the stack — there is no identity pool to remove and no foreign
+principal to add — and none was manufactured so that one could be watched failing. The two URL
+tests establish that the authority is *shaped* as narrowly as the claim says, and not that S3
+enforces that shape: the fourth falsifier in
+[ADR-0006](adr/0006-the-control-plane-and-the-identity-it-composes.md) §4 — that a presigned
+PUT signed for one part number and one uploadId is refused for any other — needs a real
+bucket, and 4b's recorded contract run owns it.
+
+- `testTheStackDeclaresNoIdentityPool`
+- `testEveryRoleInTheTemplateIsAssumableOnlyByAnAWSService`
+- `testEveryAllowInTheBucketPolicyNamesARoleThisStackDefines`
+- `testAPresignedURLIsScopedToOneMethodOneKeyOnePartAndAShortExpiry`
+- `testTwoPartsOfOneUploadAreTwoDifferentSignedRequests`
 
 ### The object key is derived from the authenticated principal, and a field the client sends never reaches it
 
@@ -367,12 +416,19 @@ two — so the rule lives in
 [ADR-0006](adr/0006-the-control-plane-and-the-identity-it-composes.md) §2, and
 `testARefContainingASeparatorIsRefused` is the only thing that enforces it.
 
-The grammar is also what a handler applies before it acts. Each of the three handlers
-written so far answers 400 to a reference of `../etc` without constructing a client, which
-is why a test about a server runs on a machine holding no credential at all.
+The grammar is also what a handler applies before it acts. Each of the four handlers answers
+400 to a reference of `../etc` without constructing a client, which is why a test about a
+server runs on a machine holding no credential at all.
 `testAHandlerRefusesARefTheGrammarRejectsBeforeItActs` is filed under this claim rather than
 under claim 3 because what it refuses is this grammar; that it refuses before it acts is the
-other half of the same decision.
+other half of the same decision. What it asserts is the reason the refusal gives and not
+only its status code. Three of the four — `urls`, `parts` and `complete` — carry a second
+guard that also answers 400, and no one request satisfies all of them at once: `parts` reads
+its `uploadId` from the query string, so a body carrying one never reaches it, and with its
+grammar check deleted it still answered 400 for a different reason. `create` is the fourth
+and has no second guard; with its grammar check deleted it reaches a client construction
+instead, and the suite records that throw as its answer rather than letting it take the
+other three with it.
 
 - `testARefThatIsNotALeafInTheCallersOwnPrefixIsRefusedRatherThanRepaired`
 - `testARefContainingASeparatorIsRefused`

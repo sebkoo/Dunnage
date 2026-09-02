@@ -129,7 +129,8 @@ describe('the stack synthesises without an account, a region or a credential', (
   //
   // The set of names is asserted, not a single name assumed. A handler that started reading a
   // second variable would change the set, and the test would report that rather than pass on
-  // the one name it was looking for.
+  // the one name it was looking for — which is why `handlers/urls.ts` takes an already-built
+  // client instead of sourcing a region and a credential pair from the environment.
   test('testEveryHandlerFunctionIsHandedTheBucketUnderTheNameItsHandlerReads', () => {
     const read = [
       ...new Set(
@@ -138,16 +139,16 @@ describe('the stack synthesises without an account, a region or a credential', (
           .flatMap(([, text]) => [...text.matchAll(/process\.env\.([A-Za-z_][A-Za-z0-9_]*)/g)].map(match => match[1])),
       ),
     ]
-    // The three functions this stack declares, identified by the entry point each is given.
-    // The fourth `AWS::Lambda::Function` in the template is CDK's auto-delete-objects
-    // provider, which reads none of these and is not this assertion's subject.
-    const entryPoints = ['create', 'parts', 'complete']
+    // The four functions this stack declares, identified by the entry point each is given. The
+    // fifth `AWS::Lambda::Function` in the template is CDK's auto-delete-objects provider,
+    // which reads none of these and is not this assertion's subject.
+    const entryPoints = ['create', 'parts', 'complete', 'urls']
     const ours = Object.entries(stackAndTemplate().template.findResources('AWS::Lambda::Function'))
       .filter(([, resource]) => entryPoints.some(entry => resource.Properties?.Handler === `${entry}.handler`))
     const missing = ours.flatMap(([id, resource]) => {
       const handed = Object.keys(resource.Properties?.Environment?.Variables ?? {})
       return read.filter(name => !handed.includes(name)).map(name => `${id} is not handed ${name}`)
     })
-    expect({ read, functions: ours.length, missing }).toEqual({ read: ['BUCKET'], functions: 3, missing: [] })
+    expect({ read, functions: ours.length, missing }).toEqual({ read: ['BUCKET'], functions: 4, missing: [] })
   })
 })

@@ -3,7 +3,7 @@
   "private": true,
   "type": "commonjs",
   "scripts": {
-    "build": "esbuild handlers/create.ts handlers/parts.ts handlers/complete.ts --bundle --platform=node --target=node24 --outdir=dist/handlers && esbuild bin/dunnage.ts --bundle --platform=node --target=node24 --packages=external --outfile=dist/app.js",
+    "build": "esbuild handlers/create.ts handlers/parts.ts handlers/complete.ts handlers/urls.ts --bundle --platform=node --target=node24 --outdir=dist/handlers && esbuild bin/dunnage.ts --bundle --platform=node --target=node24 --packages=external --outfile=dist/app.js",
     "test": "vitest run",
     "typecheck": "tsc --noEmit"
   },

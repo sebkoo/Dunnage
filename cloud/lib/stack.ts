@@ -16,7 +16,7 @@ import type { Construct } from 'constructs'
 // which is why `cloud/test/synth.test.ts` asserts against the sources and the template rather
 // than against a deployment.
 
-// The name the three handlers read the bucket out of. It is a constant here and a literal
+// The name the four handlers read the bucket out of. It is a constant here and a literal
 // there, and nothing in this phase deploys, so no test can catch the two drifting apart by
 // running them together — `testEveryHandlerFunctionIsHandedTheBucketUnderTheNameItsHandlerReads`
 // reads the name out of `handlers/` and out of the synthesised template and compares them.
@@ -59,9 +59,17 @@ export class DunnageStack extends Stack {
     // and `CompleteMultipartUpload` all require, and `s3:ListMultipartUploadParts` is the
     // enumeration permission the control plane keeps.
     //
-    // A fresh statement per function rather than one object added to three roles: a policy
-    // statement is mutable, and one shared instance makes three roles a single object three
+    // A fresh statement per function rather than one object added to four roles: a policy
+    // statement is mutable, and one shared instance makes four roles a single object four
     // constructs hold a reference to.
+    //
+    // The `Urls` function makes no S3 call of its own and still needs `s3:PutObject`. A
+    // presigned URL carries the authority of the principal that signed it, so the PUT a device
+    // makes is made with this role's permission and never with one of its own — which is the
+    // whole of claim 2's first half. It also receives `s3:ListMultipartUploadParts`, which it
+    // does not use, because one statement serves all four functions; whether the enumeration
+    // permission should be narrower than the control plane is claim 5's question and commit
+    // 8's to answer.
     const uploadsGrant = (): PolicyStatement =>
       new PolicyStatement({
         actions: ['s3:PutObject', 's3:ListMultipartUploadParts'],
@@ -88,14 +96,20 @@ export class DunnageStack extends Stack {
 
     const api = new HttpApi(this, 'Api', { defaultAuthorizer: authorizer })
 
-    // Three of ADR-0006 §4's four routes. `POST /uploads/{ref}/urls` arrives with
-    // `handlers/urls.ts`, in the commit that writes it: a route with no handler is worse than
-    // a route that is one commit late, and `Code.fromAsset` needs the asset directory to hold
-    // what the template says it holds.
+    // ADR-0006 §4's four routes, each with a function of its own. `POST /uploads/{ref}/urls`
+    // arrives here with `handlers/urls.ts`, in the commit that writes it: a route with no
+    // handler is worse than a route that is one commit late, and `Code.fromAsset` needs the
+    // asset directory to hold what the template says it holds. The route, its function and the
+    // fourth `npm run build` entry point are therefore one decision and land together.
     api.addRoutes({
       path: '/uploads',
       methods: [HttpMethod.POST],
       integration: new HttpLambdaIntegration('CreateIntegration', route('Create', 'create')),
+    })
+    api.addRoutes({
+      path: '/uploads/{ref}/urls',
+      methods: [HttpMethod.POST],
+      integration: new HttpLambdaIntegration('UrlsIntegration', route('Urls', 'urls')),
     })
     api.addRoutes({
       path: '/uploads/{ref}/parts',
