@@ -50,7 +50,7 @@ whatsoever about 3.
 
 ### An interruption is not a failure, and a duplicate is not progress
 
-See [ADR-0002](docs/adr/0002-interruption-is-not-a-failure.md).
+See [ADR-0002](adr/0002-interruption-is-not-a-failure.md).
 
 - `testNetworkInterruptionMidChunk_LeavesTheChunkUnconfirmedNotFailed`
 - `testDuplicateConfirmation_IsIdempotentUnderReplay`
@@ -58,7 +58,7 @@ See [ADR-0002](docs/adr/0002-interruption-is-not-a-failure.md).
 
 ### Giving up is a decision, taken against a budget that says what an attempt is
 
-See [ADR-0003](docs/adr/0003-what-an-attempt-is-and-where-time-enters.md).
+See [ADR-0003](adr/0003-what-an-attempt-is-and-where-time-enters.md).
 
 - `testRetryExhaustion_IsADecisionThatPreservesConfirmedProgress`
 - `testInterruptionsNeverSpendTheRetryBudgetHoweverManyArrive`
@@ -94,7 +94,7 @@ of these ever stops losing its work, the control has been broken.
 ## Phase 2: Durable ledger — the log outlives the process that wrote it
 
 The durable ledger: a second implementation of `UploadEventLog`, backed by a file. See
-[ADR-0004](docs/adr/0004-the-on-disk-ledger-and-what-an-unreadable-record-does.md).
+[ADR-0004](adr/0004-the-on-disk-ledger-and-what-an-unreadable-record-does.md).
 
 ### Every event has one written form on disk, and reading it back gives the event that was written
 
@@ -175,7 +175,7 @@ ever stops losing this, the control has been broken.
 ## Phase 3: Driver — it executes Core's effects and concludes nothing of its own
 
 The driver, and the clock it waits behind. See
-[ADR-0005](docs/adr/0005-the-driver-and-the-clock-it-waits-behind.md).
+[ADR-0005](adr/0005-the-driver-and-the-clock-it-waits-behind.md).
 
 Nothing in this phase touches a network or a real clock. What it establishes is that the
 driver keeps the contract ADR-0002 and ADR-0003 wrote for it before any of it existed; it
@@ -287,7 +287,7 @@ The control plane, and the half of phase 4 a reader can check with no AWS accoun
 here is deployed: every test reaches a pure function, an assertion about a synthesised
 template, or the path a handler takes before it constructs a client — and no test in this
 phase is evidence about any AWS account. See
-[ADR-0006](docs/adr/0006-the-control-plane-and-the-identity-it-composes.md).
+[ADR-0006](adr/0006-the-control-plane-and-the-identity-it-composes.md).
 
 These are the first tests in this file that `swift test` does not run. They are `vitest`, in
 `cloud/test/`, on a second runner.
@@ -309,9 +309,8 @@ What happens after the S3 call carries no test here, and nothing is faked to mak
 tested. A stubbed `S3Client` would be a double of a vendor's product rather than of a
 contract this repository states, so writing one would encode a guess about AWS and then run
 the guess against itself. 4b's recorded contract run against a real bucket is what checks
-that half, and
-[ADR-0006](docs/adr/0006-the-control-plane-and-the-identity-it-composes.md) §4 names the four
-observations that would falsify these handlers.
+that half, and [ADR-0006](adr/0006-the-control-plane-and-the-identity-it-composes.md) §4
+names the four observations that would falsify these handlers.
 
 - `testTheObjectKeyIsDerivedFromTheVerifiedPrincipalAndTheRefAlone`
 - `testARequestBodyNamingAKeyOrASubProducesTheSameKeyAsOneWithout`
@@ -327,7 +326,7 @@ is `<ref> "/" <uploadId>`, and 4b's `parseSession` splits it on the first `/`; t
 total only because no reference this server accepts contains one. Different language,
 different suite, different phase, and nothing a compiler or a test runner sees connects the
 two — so the rule lives in
-[ADR-0006](docs/adr/0006-the-control-plane-and-the-identity-it-composes.md) §2, and
+[ADR-0006](adr/0006-the-control-plane-and-the-identity-it-composes.md) §2, and
 `testARefContainingASeparatorIsRefused` is the only thing that enforces it.
 
 The grammar is also what a handler applies before it acts. Each of the three handlers
