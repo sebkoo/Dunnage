@@ -8,6 +8,7 @@ let package = Package(
         .library(name: "DunnageCore", targets: ["DunnageCore"]),
         .library(name: "DunnageLedger", targets: ["DunnageLedger"]),
         .library(name: "DunnageDriver", targets: ["DunnageDriver"]),
+        .library(name: "DunnageTransport", targets: ["DunnageTransport"]),
     ],
     targets: [
         // Pure. No networking, no disk, no clock, no randomness.
@@ -19,7 +20,11 @@ let package = Package(
         // The driver. It executes Core's effects, so the clock lives here and nowhere else.
         .target(name: "DunnageDriver", dependencies: ["DunnageCore"]),
 
+        // The transport. It leaves the process, so the session lives here and nowhere else.
+        .target(name: "DunnageTransport", dependencies: ["DunnageCore"]),
+
         .testTarget(name: "DunnageTests",
-                    dependencies: ["DunnageCore", "DunnageLedger", "DunnageDriver"]),
+                    dependencies: ["DunnageCore", "DunnageLedger", "DunnageDriver",
+                                   "DunnageTransport"]),
     ]
 )

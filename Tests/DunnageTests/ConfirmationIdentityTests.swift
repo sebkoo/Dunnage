@@ -10,6 +10,7 @@ final class ConfirmationIdentityTests: XCTestCase {
     private let intent = UploadIntent(
         upload: UploadID("upload-a"),
         destination: DestinationRef("destination-a"),
+        payload: PayloadRef("payload-a"),
         plan: ChunkPlan(totalBytes: 20, chunkSize: 4))
 
     private var transferring: UploadMachineState {

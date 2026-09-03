@@ -26,6 +26,7 @@ final class DriverNegativeControlTests: XCTestCase {
     private var intent: UploadIntent {
         UploadIntent(upload: UploadID("upload-g"),
                      destination: DestinationRef("destination-g"),
+                     payload: PayloadRef("payload-a"),
                      plan: ChunkPlan(totalBytes: 20, chunkSize: 4),
                      policy: policy)
     }

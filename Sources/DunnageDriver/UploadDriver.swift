@@ -128,18 +128,18 @@ public struct UploadDriver: Sendable {
             let session = try await transport.openSession(for: intent)
             return try await record(.transportSessionOpened(session), for: upload, into: &state)
 
-        case .askAuthorityForConfirmedProgress(_, let session):
-            let confirmation = try await transport.confirmedProgress(in: session)
+        case .askAuthorityForConfirmedProgress(let upload, let session):
+            let confirmation = try await transport.confirmedProgress(for: upload, in: session)
             return try await record(.authorityReported(confirmation), for: upload, into: &state)
 
-        case .send(let transfers, let session, let after):
+        case .send(let transfers, let intent, let session, let after):
             // Before the transfer, not after it and not instead of it. This is the only
             // place backoff happens.
             try await clock.wait(for: after)
 
             var produced: [UploadEffect] = []
             for transfer in transfers {
-                let outcome = try await answer(for: transfer, in: session)
+                let outcome = try await answer(for: transfer, of: intent, in: session)
                 for next in try await record(Self.event(for: outcome), for: upload, into: &state)
                 where !produced.contains(next) {
                     produced.append(next)
@@ -173,9 +173,10 @@ public struct UploadDriver: Sendable {
     /// the event would still be true, because the event is about the answer. That the two
     /// coincide is a property of this phase's transport and not of the design.
     private func answer(for transfer: PlannedTransfer,
+                        of intent: UploadIntent,
                         in session: TransportSessionID) async throws -> TransferOutcome {
         try await withThrowingTaskGroup(of: TransferOutcome?.self) { group in
-            group.addTask { try await transport.send(transfer, in: session) }
+            group.addTask { try await transport.send(transfer, of: intent, in: session) }
             group.addTask {
                 try await clock.wait(for: quietAfter)
                 return nil                       // the deadline came, and no answer with it

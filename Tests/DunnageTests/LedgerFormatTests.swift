@@ -16,6 +16,7 @@ final class LedgerFormatTests: XCTestCase {
     private var intent: UploadIntent {
         UploadIntent(upload: upload,
                      destination: DestinationRef("d"),
+                     payload: PayloadRef("p"),
                      plan: ChunkPlan(totalBytes: 20, chunkSize: 4))
     }
 
@@ -90,7 +91,7 @@ final class LedgerFormatTests: XCTestCase {
 
         XCTAssertEqual(
             try written(.declared(intent)),
-            #"{"event":"declared","intent":{"destination":"d","plan":{"chunkSize":4,"totalBytes":20},"policy":{"initialBackoff":{"attoseconds":0,"seconds":1},"maxAttemptsPerChunk":3,"maximumBackoff":{"attoseconds":0,"seconds":60}},"upload":"u"}}"#,
+            #"{"event":"declared","intent":{"destination":"d","payload":"p","plan":{"chunkSize":4,"totalBytes":20},"policy":{"initialBackoff":{"attoseconds":0,"seconds":1},"maxAttemptsPerChunk":3,"maximumBackoff":{"attoseconds":0,"seconds":60}},"upload":"u"}}"#,
             "the declaration carries the whole intent, because replaying the log alone rebuilds it")
     }
 
@@ -138,9 +139,9 @@ final class LedgerFormatTests: XCTestCase {
             ("a negative byte offset",
              #"{"confirmation":{"progress":{"offset":-1,"shape":"offset"},"session":"s","upload":"u"},"event":"authorityReported"}"#),
             ("a chunk size of zero",
-             #"{"event":"declared","intent":{"destination":"d","plan":{"chunkSize":0,"totalBytes":20},"policy":{"initialBackoff":{"attoseconds":0,"seconds":1},"maxAttemptsPerChunk":3,"maximumBackoff":{"attoseconds":0,"seconds":60}},"upload":"u"}}"#),
+             #"{"event":"declared","intent":{"destination":"d","payload":"p","plan":{"chunkSize":0,"totalBytes":20},"policy":{"initialBackoff":{"attoseconds":0,"seconds":1},"maxAttemptsPerChunk":3,"maximumBackoff":{"attoseconds":0,"seconds":60}},"upload":"u"}}"#),
             ("a retry cap below the first wait",
-             #"{"event":"declared","intent":{"destination":"d","plan":{"chunkSize":4,"totalBytes":20},"policy":{"initialBackoff":{"attoseconds":0,"seconds":60},"maxAttemptsPerChunk":3,"maximumBackoff":{"attoseconds":0,"seconds":1}},"upload":"u"}}"#),
+             #"{"event":"declared","intent":{"destination":"d","payload":"p","plan":{"chunkSize":4,"totalBytes":20},"policy":{"initialBackoff":{"attoseconds":0,"seconds":60},"maxAttemptsPerChunk":3,"maximumBackoff":{"attoseconds":0,"seconds":1}},"upload":"u"}}"#),
         ]
 
         for (what, payload) in refusable {

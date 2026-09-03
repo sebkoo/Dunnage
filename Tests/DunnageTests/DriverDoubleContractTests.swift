@@ -14,6 +14,7 @@ final class DriverDoubleContractTests: XCTestCase {
     private var intent: UploadIntent {
         UploadIntent(upload: UploadID("upload-a"),
                      destination: DestinationRef("destination-a"),
+                     payload: PayloadRef("payload-a"),
                      plan: ChunkPlan(totalBytes: 8, chunkSize: 4))
     }
 
@@ -89,7 +90,7 @@ final class DriverDoubleContractTests: XCTestCase {
         let session = try await transport.openSession(for: intent)
 
         var answers: [TransferOutcome] = []
-        for _ in 1...4 { answers.append(try await transport.send(transfer(1), in: session)) }
+        for _ in 1...4 { answers.append(try await transport.send(transfer(1), of: intent, in: session)) }
 
         XCTAssertEqual(answers, [.refused(ChunkID(1)),
                                  .interrupted(ChunkID(1)),
@@ -107,7 +108,8 @@ final class DriverDoubleContractTests: XCTestCase {
         let session = try await transport.openSession(for: intent)
 
         let transfer = self.transfer(1)
-        let sending = Task { try await transport.send(transfer, in: session) }
+        let intent = self.intent
+        let sending = Task { try await transport.send(transfer, of: intent, in: session) }
         while await !transport.calls.contains(.sent(ChunkID(1))) { await Task.yield() }
 
         sending.cancel()
@@ -118,7 +120,7 @@ final class DriverDoubleContractTests: XCTestCase {
             // as expected: the only way out of a silence is to stop waiting for it
         }
 
-        let held = try await transport.confirmedProgress(in: session)
+        let held = try await transport.confirmedProgress(for: intent.upload, in: session)
         XCTAssertEqual(held.progress, .chunks([]), "and nothing landed while it was quiet")
     }
 
@@ -140,9 +142,9 @@ final class DriverDoubleContractTests: XCTestCase {
         let transport = JournallingTransport(wrapped: double, journal: journal)
 
         let session = try await transport.openSession(for: intent)
-        let first = try await transport.send(transfer(1), in: session)
-        let second = try await transport.send(transfer(2), in: session)
-        let held = try await transport.confirmedProgress(in: session)
+        let first = try await transport.send(transfer(1), of: intent, in: session)
+        let second = try await transport.send(transfer(2), of: intent, in: session)
+        let held = try await transport.confirmedProgress(for: intent.upload, in: session)
 
         XCTAssertEqual(first, .reportedComplete(ChunkID(1)))
         XCTAssertEqual(second, .refused(ChunkID(2)))

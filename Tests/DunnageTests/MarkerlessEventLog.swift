@@ -86,6 +86,7 @@ actor MarkerlessEventLog: UploadEventLog {
         case .declared(let intent):
             let policy = intent.policy
             return ["declared", intent.upload.rawValue, intent.destination.rawValue,
+                    intent.payload.rawValue,
                     "\(policy.maxAttemptsPerChunk)",
                     "\(policy.initialBackoff.components.seconds)",
                     "\(policy.initialBackoff.components.attoseconds)",
@@ -127,14 +128,15 @@ actor MarkerlessEventLog: UploadEventLog {
 
         switch token.first {
         case "declared":
-            guard token.count == 10, let attempts = Int(token[3]),
-                  let initialSeconds = Int64(token[4]), let initialAttoseconds = Int64(token[5]),
-                  let maximumSeconds = Int64(token[6]), let maximumAttoseconds = Int64(token[7]),
-                  let chunkSize = Int(token[8]), let totalBytes = Int(token[9]),
+            guard token.count == 11, let attempts = Int(token[4]),
+                  let initialSeconds = Int64(token[5]), let initialAttoseconds = Int64(token[6]),
+                  let maximumSeconds = Int64(token[7]), let maximumAttoseconds = Int64(token[8]),
+                  let chunkSize = Int(token[9]), let totalBytes = Int(token[10]),
                   attempts >= 1, chunkSize > 0, totalBytes >= 0 else { throw fail() }
             return .declared(UploadIntent(
                 upload: UploadID(token[1]),
                 destination: DestinationRef(token[2]),
+                payload: PayloadRef(token[3]),
                 plan: ChunkPlan(totalBytes: totalBytes, chunkSize: chunkSize),
                 policy: RetryPolicy(
                     maxAttemptsPerChunk: attempts,

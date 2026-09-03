@@ -49,15 +49,25 @@ public protocol UploadTransport: Sendable {
     func openSession(for intent: UploadIntent) async throws -> TransportSessionID
 
     /// Transfer one planned span.
+    ///
+    /// It receives the intent as well as the transfer, because a transport that has to open
+    /// a file cannot find the payload from a `ChunkID`, a `ByteRange` and an opaque session
+    /// string (ADR-0007 §3).
     func send(_ transfer: PlannedTransfer,
+              of intent: UploadIntent,
               in session: TransportSessionID) async throws -> TransferOutcome
 
     /// Ask the authority what it durably holds.
     ///
+    /// It receives the upload as well as the session, because the confirmation it returns
+    /// names an upload, and a transport asked with the session alone has nothing to name
+    /// it from after a relaunch (ADR-0007 §3).
+    ///
     /// The returned confirmation carries its own semantics: which upload, which transport
     /// operation, and whether the guarantee is set-shaped or offset-shaped. Core does not
     /// decide which; the transport contract does.
-    func confirmedProgress(in session: TransportSessionID) async throws -> Confirmation
+    func confirmedProgress(for upload: UploadID,
+                           in session: TransportSessionID) async throws -> Confirmation
 
     /// Ask for the object to be created from what the authority holds.
     func finalize(_ session: TransportSessionID) async throws

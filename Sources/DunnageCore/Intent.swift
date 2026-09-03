@@ -17,6 +17,16 @@ public struct DestinationRef: Hashable, Sendable {
     public init(_ rawValue: String) { self.rawValue = rawValue }
 }
 
+/// Where the payload's bytes are. Opaque to Core the way `DestinationRef` is: never
+/// parsed, never compared structurally, never a source of authority. Its raw value is a
+/// path relative to Application Support, so it survives the container moving, and the
+/// app is the only thing that resolves it. Carried on the intent so that a cold start
+/// finds the payload on the log — ADR-0006 O-12, closed by ADR-0007 §8.
+public struct PayloadRef: Hashable, Sendable {
+    public let rawValue: String
+    public init(_ rawValue: String) { self.rawValue = rawValue }
+}
+
 /// Identity of one chunk within one upload's plan. A 1-based ordinal assigned by
 /// `ChunkPlan`; the first chunk is ordinal 1.
 ///
@@ -95,6 +105,9 @@ public struct ChunkPlan: Hashable, Sendable {
 public struct UploadIntent: Hashable, Sendable {
     public let upload: UploadID
     public let destination: DestinationRef
+
+    /// Where the bytes are. No default: Core cannot invent where bytes live.
+    public let payload: PayloadRef
     public let plan: ChunkPlan
 
     /// How hard to try. Part of the intent because the declaration is what reaches the log,
@@ -103,10 +116,12 @@ public struct UploadIntent: Hashable, Sendable {
 
     public init(upload: UploadID,
                 destination: DestinationRef,
+                payload: PayloadRef,
                 plan: ChunkPlan,
                 policy: RetryPolicy = .default) {
         self.upload = upload
         self.destination = destination
+        self.payload = payload
         self.plan = plan
         self.policy = policy
     }

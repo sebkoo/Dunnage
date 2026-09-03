@@ -7,6 +7,7 @@ final class ResumePlanTests: XCTestCase {
     private let intent = UploadIntent(
         upload: UploadID("upload-a"),
         destination: DestinationRef("destination-a"),
+        payload: PayloadRef("payload-a"),
         plan: ChunkPlan(totalBytes: 20, chunkSize: 4))
 
     private func scheduled(_ confirmed: ConfirmedProgress?) -> Set<ChunkID> {

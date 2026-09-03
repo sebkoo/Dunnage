@@ -6,6 +6,7 @@ final class TransitionTableTests: XCTestCase {
     private let intent = UploadIntent(
         upload: UploadID("upload-a"),
         destination: DestinationRef("destination-a"),
+        payload: PayloadRef("payload-a"),
         plan: ChunkPlan(totalBytes: 20, chunkSize: 4))
     private let session = TransportSessionID("session-1")
 
@@ -208,7 +209,7 @@ final class TransitionTableTests: XCTestCase {
 
         XCTAssertEqual(step(.authorityReported(emptyReport)),
                        [.send(ResumePlan.derive(for: intent, given: .chunks([])).transfers,
-                              session, after: .zero)],
+                              intent, session, after: .zero)],
                        "an authority holding nothing leaves the whole payload to send")
         XCTAssertEqual(current.phase, .transferring)
 

@@ -60,15 +60,15 @@ struct ConcludingDriver: Sendable {
             let session = try await transport.openSession(for: intent)
             return try await record(.transportSessionOpened(session), for: upload, into: &state)
 
-        case .askAuthorityForConfirmedProgress(_, let session):
-            let confirmation = try await transport.confirmedProgress(in: session)
+        case .askAuthorityForConfirmedProgress(let upload, let session):
+            let confirmation = try await transport.confirmedProgress(for: upload, in: session)
             return try await record(.authorityReported(confirmation), for: upload, into: &state)
 
-        case .send(let transfers, let session, let after):
+        case .send(let transfers, let intent, let session, let after):
             try await clock.wait(for: after)
             var produced: [UploadEffect] = []
             for transfer in transfers {
-                let outcome = try await transport.send(transfer, in: session)
+                let outcome = try await transport.send(transfer, of: intent, in: session)
                 for next in try await record(Self.event(for: outcome), for: upload, into: &state)
                 where !produced.contains(next) {
                     produced.append(next)

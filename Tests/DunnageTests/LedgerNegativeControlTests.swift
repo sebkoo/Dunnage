@@ -16,6 +16,7 @@ final class LedgerNegativeControlTests: XCTestCase {
     // twenty chunks of four bytes
     private let intent = UploadIntent(upload: UploadID("upload-a"),
                                       destination: DestinationRef("destination-a"),
+                                      payload: PayloadRef("payload-a"),
                                       plan: ChunkPlan(totalBytes: 80, chunkSize: 4))
     private let upload = UploadID("upload-a")
     private let session = TransportSessionID("session-1")

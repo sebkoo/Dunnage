@@ -17,9 +17,11 @@ import DunnageCore
 ///   decision, not the absence of one.
 public enum LedgerFormat {
 
-    /// The format version written into a ledger's header. One version has ever existed;
-    /// the reader refuses any other rather than translating it.
-    public static let version = 1
+    /// The format version written into a ledger's header. Two versions have existed:
+    /// 1 wrote no payload, and 2 does. The reader refuses any other version rather than
+    /// translating it, and 1 is refused, not read — no version-1 log exists outside the
+    /// suite, so a reader for it would be a migration for a file no one has (ADR-0007 §8).
+    public static let version = 2
 
     public static func encode(_ event: UploadEvent) throws -> [UInt8] {
         // Sorted keys, and a set written in ascending order: one event has one written
@@ -105,6 +107,7 @@ public enum LedgerFormat {
     private static func written(_ intent: UploadIntent) -> [String: Any] {
         ["upload": intent.upload.rawValue,
          "destination": intent.destination.rawValue,
+         "payload": intent.payload.rawValue,
          "plan": ["totalBytes": intent.plan.totalBytes, "chunkSize": intent.plan.chunkSize],
          "policy": ["maxAttemptsPerChunk": intent.policy.maxAttemptsPerChunk,
                     "initialBackoff": written(intent.policy.initialBackoff),
@@ -146,7 +149,7 @@ public enum LedgerFormat {
     // MARK: - Reading
 
     private static func intent(_ object: [String: Any]) throws -> UploadIntent {
-        try only(["destination", "plan", "policy", "upload"], in: object, of: "intent")
+        try only(["destination", "payload", "plan", "policy", "upload"], in: object, of: "intent")
 
         let plan = try self.object(object, "plan", of: "intent")
         try only(["chunkSize", "totalBytes"], in: plan, of: "plan")
@@ -173,6 +176,7 @@ public enum LedgerFormat {
         return UploadIntent(
             upload: UploadID(try string(object, "upload", of: "intent")),
             destination: DestinationRef(try string(object, "destination", of: "intent")),
+            payload: PayloadRef(try string(object, "payload", of: "intent")),
             plan: ChunkPlan(totalBytes: totalBytes, chunkSize: chunkSize),
             policy: RetryPolicy(maxAttemptsPerChunk: attempts,
                                 initialBackoff: initial,

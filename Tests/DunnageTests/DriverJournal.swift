@@ -68,13 +68,15 @@ struct JournallingTransport: UploadTransport {
     }
 
     func send(_ transfer: PlannedTransfer,
+              of intent: UploadIntent,
               in session: TransportSessionID) async throws -> TransferOutcome {
         await journal.record(.sent(transfer.chunk))
-        return try await wrapped.send(transfer, in: session)
+        return try await wrapped.send(transfer, of: intent, in: session)
     }
 
-    func confirmedProgress(in session: TransportSessionID) async throws -> Confirmation {
-        try await wrapped.confirmedProgress(in: session)
+    func confirmedProgress(for upload: UploadID,
+                           in session: TransportSessionID) async throws -> Confirmation {
+        try await wrapped.confirmedProgress(for: upload, in: session)
     }
 
     func finalize(_ session: TransportSessionID) async throws {

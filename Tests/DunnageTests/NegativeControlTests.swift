@@ -12,6 +12,7 @@ final class NegativeControlTests: XCTestCase {
     private let intent = UploadIntent(
         upload: UploadID("upload-a"),
         destination: DestinationRef("destination-a"),
+        payload: PayloadRef("payload-a"),
         plan: ChunkPlan(totalBytes: 20, chunkSize: 4))
 
     private func transfer(_ ordinal: Int) -> PlannedTransfer {
@@ -33,13 +34,13 @@ final class NegativeControlTests: XCTestCase {
         let transport = InMemoryTransportDouble(shape: .offsetShaped, durability: .retainsNothing)
         let session = try await transport.openSession(for: intent)
 
-        for ordinal in [1, 2, 3, 4] { _ = try await transport.send(transfer(ordinal), in: session) }
-        let before = try await transport.confirmedProgress(in: session)
+        for ordinal in [1, 2, 3, 4] { _ = try await transport.send(transfer(ordinal), of: intent, in: session) }
+        let before = try await transport.confirmedProgress(for: intent.upload, in: session)
         XCTAssertEqual(before.progress, .offset(ByteOffset(16)), "sixteen of twenty bytes went out")
 
         await transport.interrupt(session)
 
-        let after = try await transport.confirmedProgress(in: session)
+        let after = try await transport.confirmedProgress(for: intent.upload, in: session)
         XCTAssertEqual(after.progress, .offset(ByteOffset(0)),
                        "a whole-object authority holds nothing confirmable until the object exists")
 
@@ -60,10 +61,10 @@ final class NegativeControlTests: XCTestCase {
                                                 durability: .retainsCompletedUnits)
         let session = try await transport.openSession(for: intent)
 
-        for ordinal in [1, 2, 3, 4] { _ = try await transport.send(transfer(ordinal), in: session) }
+        for ordinal in [1, 2, 3, 4] { _ = try await transport.send(transfer(ordinal), of: intent, in: session) }
         await transport.interrupt(session)
 
-        let after = try await transport.confirmedProgress(in: session)
+        let after = try await transport.confirmedProgress(for: intent.upload, in: session)
         XCTAssertEqual(after.progress, .chunks([ChunkID(1), ChunkID(2), ChunkID(3), ChunkID(4)]),
                        "an authority that names units still holds them after the connection drops")
         XCTAssertEqual(ResumePlan.derive(for: intent, given: after.progress).transfers.map(\.chunk),

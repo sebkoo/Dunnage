@@ -173,3 +173,17 @@ The build comes first because `cloud/cdk.json` is `{"app": "node dist/app.js"}` 
 `cloud/dist/` is not committed, so in a fresh clone the synth has no app to run until
 the build has written one; `--no-lookups` is the flag CI passes, and it guards against a
 `fromLookup` arriving later rather than doing anything today.
+
+## Phase 5: App — the transfer outlives the process that started it
+
+The app, and the transport it owns: a background `URLSession` speaking the control plane's
+four routes, against a stand-in here, the deployed plane and S3 in 4b. Three tiers, by
+name — deterministic (`swift test` and the app's unit-test bundle: virtual clock, no
+session, no socket), simulator evidence (one named test on the CI image, which kills the
+process mid-transfer and reads the relaunch from outside), and the device harness (a
+numbered procedure on a real iPhone, recorded and never a CI claim). See
+[ADR-0007](docs/adr/0007-the-transfer-that-outlives-the-process-and-the-stand-in-it-is-measured-against.md)
+for what each tier does and does not establish. The named tests are in
+[`docs/invariants.md`](docs/invariants.md).
+
+- A cold start finds the payload on the log, and a chunk file is a cache bounded by the in-flight set

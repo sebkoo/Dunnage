@@ -70,7 +70,9 @@ See [ADR-0003](adr/0003-what-an-attempt-is-and-where-time-enters.md).
 ### The doubles keep the contracts they stand in for
 
 A fake that quietly disagrees with the protocol makes every test standing on it worthless,
-so the fakes are tested too.
+so the fakes are tested too. The last name below arrived with phase 5 rather than phase 1,
+because the double's contract grew when the transport's signatures did (ADR-0007 §3), and
+a double whose contract is not tested is one the suite trusts on faith.
 
 - `testTransportDoubleIssuesDistinctSessionsAndRefusesUnknownOnes`
 - `testTransportDoubleReportsSetShapedProgressIncludingGaps`
@@ -80,6 +82,7 @@ so the fakes are tested too.
 - `testTransportDoubleScriptedToDuplicateDeliversTheSameReportTwice`
 - `testTransportDoubleThatForgotASessionCannotBeAskedAboutIt`
 - `testTransportDoubleRefusesToFinalizeAnIncompleteUpload`
+- `testTransportDoubleRefusesAProgressQuestionNamingAnotherUpload`
 
 ### The failure mode the thesis claims to remove, kept working on purpose
 
@@ -528,3 +531,38 @@ object, the control has been broken and `create` has nothing left to be measured
 - `testTheClientTrustedKeyHandlerKeepsTheContractItIsMeasuredAgainst`
 - `testAClientTrustedKeyPutsTwoCallersOnOneObject`
 - `testTheDerivedKeyAfterTheSameTwoRequestsKeepsTheCallersApart`
+
+## Phase 5: App — the transfer outlives the process that started it
+
+The app, and the transport it owns. See
+[ADR-0007](adr/0007-the-transfer-that-outlives-the-process-and-the-stand-in-it-is-measured-against.md).
+
+Three tiers, and each section below says which its tests are in. Deterministic is
+`swift test` or the app's unit-test bundle: a virtual clock, no session, no socket.
+Simulator evidence is `xcodebuild test` on the CI image against the stand-in, where one
+named test kills the process and reads the relaunch from outside. The device harness is a
+numbered procedure on a real iPhone, recorded and never CI's evidence. Nothing under this
+heading touches a session.
+
+### A cold start finds the payload on the log, and a chunk file is a cache bounded by the in-flight set
+
+All five are deterministic, under `swift test`. ADR-0006 O-12 found the gap: a relaunched
+process had the destination and the plan on the log and no way to find the bytes. The
+intent now carries `PayloadRef`, the declaration on disk carries it inside `"intent"`, and
+the ledger's format is 2 (ADR-0007 §8). The second test went red genuinely — a version-1
+header was accepted while the format was still version 1 — and it keeps 1 refused rather
+than read, because no version-1 log exists outside this suite and a reader that defaulted
+the payload for one would be a migration written for a file no one has. A chunk file is
+written at `send` from the ref and the plan's range, holds exactly that span, is deleted
+when the authority confirms the chunk, and is re-derived by the next `send` if it is ever
+missing (ADR-0007 §7). A payload shorter than the plan is refused rather than written
+short, because a short chunk file would be sent as if it were whole; the fifth test is the
+guard's, and was shown red by removing the guard. The double's own contract for the
+parameter `confirmedProgress` gained is under phase 1's heading, where the rest of that
+contract is.
+
+- `testAColdStartFindsThePayloadOnTheLog`
+- `testAVersionOneHeaderIsRefusedAndItsVersionIsNamed`
+- `testAChunkFileHoldsExactlyTheSpanThePlanNames`
+- `testTheChunkFilesThatExistAtOnceAreBoundedByTheInFlightSet`
+- `testAPayloadShorterThanThePlanIsRefusedRatherThanWrittenShort`

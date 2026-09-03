@@ -109,7 +109,7 @@ final class FileEventLogTests: XCTestCase {
     /// A header naming a format this binary does not have is the same situation as an event
     /// it does not have, and gets the same answer. Reading it as version 1 would be a guess.
     func testALedgerWrittenInAFormatThisBinaryDoesNotKnowIsRefusedRatherThanRead() async throws {
-        for (what, header) in [("a later version", "dunnage-ledger 2"),
+        for (what, header) in [("a later version", "dunnage-ledger 3"),
                                ("not a ledger at all", "# upload log")] {
             let directory = try temporaryDirectory()
             let log = FileEventLog(directory: directory)
@@ -224,6 +224,25 @@ final class FileEventLogTests: XCTestCase {
                        "one upload replayed another upload's declaration")
         XCTAssertFalse(readB.map(\.event).contains(.declared(EventLogContract.intent(longA))),
                        "one upload replayed another upload's declaration")
+    }
+
+    /// ADR-0007 §8. Format 1 wrote no payload, so a version-1 log describes an upload whose
+    /// bytes a cold start cannot find. It is refused under ADR-0004 §4 rather than read with
+    /// a payload defaulted in, and the refusal names the version it could not read. No
+    /// version-1 log exists outside this suite, which is why 1 is refused and not migrated.
+    func testAVersionOneHeaderIsRefusedAndItsVersionIsNamed() async throws {
+        let directory = try temporaryDirectory()
+        let upload = UploadID("upload-a")
+        let file = directory.appendingPathComponent(
+            upload.rawValue.utf8.map { String(format: "%02x", $0) }.joined() + ".ledger")
+        try Data("dunnage-ledger 1\n".utf8).write(to: file)
+
+        let coldStart = FileEventLog(directory: directory)
+        var refused: LedgerError?
+        do { _ = try await coldStart.records(for: upload) }
+        catch let error as LedgerError { refused = error }
+        XCTAssertEqual(refused, .unsupportedFormatVersion(1),
+                       "a version-1 header was read, or refused without naming its version")
     }
 
     // MARK: -

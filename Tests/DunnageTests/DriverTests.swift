@@ -19,6 +19,7 @@ final class DriverRecordingTests: XCTestCase {
     private var intent: UploadIntent {
         UploadIntent(upload: UploadID("upload-a"),
                      destination: DestinationRef("destination-a"),
+                     payload: PayloadRef("payload-a"),
                      plan: ChunkPlan(totalBytes: 12, chunkSize: 4),
                      policy: policy)
     }
@@ -116,6 +117,7 @@ final class DriverWaitingTests: XCTestCase {
     private var intent: UploadIntent {
         UploadIntent(upload: UploadID("upload-b"),
                      destination: DestinationRef("destination-b"),
+                     payload: PayloadRef("payload-a"),
                      plan: ChunkPlan(totalBytes: 8, chunkSize: 4),
                      policy: policy)
     }
@@ -219,6 +221,7 @@ final class DriverTimeoutTests: XCTestCase {
     private var intent: UploadIntent {
         UploadIntent(upload: UploadID("upload-c"),
                      destination: DestinationRef("destination-c"),
+                     payload: PayloadRef("payload-a"),
                      plan: ChunkPlan(totalBytes: 4, chunkSize: 4),
                      policy: policy)
     }
@@ -320,6 +323,7 @@ final class DriverColdStartTests: XCTestCase {
     private var intent: UploadIntent {
         UploadIntent(upload: UploadID("upload-d"),
                      destination: DestinationRef("destination-d"),
+                     payload: PayloadRef("payload-a"),
                      plan: ChunkPlan(totalBytes: 12, chunkSize: 4))
     }
 
@@ -351,7 +355,7 @@ final class DriverColdStartTests: XCTestCase {
         let transport = InMemoryTransportDouble(shape: .setShaped)
         let opened = try await transport.openSession(for: intent)
         XCTAssertEqual(opened, session)
-        for ordinal in 1...3 { _ = try await transport.send(transfer(ordinal), in: opened) }
+        for ordinal in 1...3 { _ = try await transport.send(transfer(ordinal), of: intent, in: opened) }
 
         let log = InMemoryEventLog()
         try await log.append([.declared(intent),
@@ -423,6 +427,7 @@ final class DriverAbandonmentTests: XCTestCase {
     private func intent(_ id: String, chunks: Int) -> UploadIntent {
         UploadIntent(upload: UploadID(id),
                      destination: DestinationRef("destination-\(id)"),
+                     payload: PayloadRef("payload-a"),
                      plan: ChunkPlan(totalBytes: chunks * 4, chunkSize: 4),
                      policy: policy)
     }

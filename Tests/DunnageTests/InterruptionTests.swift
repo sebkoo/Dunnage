@@ -13,6 +13,7 @@ final class InterruptionTests: XCTestCase {
     private let intent = UploadIntent(
         upload: UploadID("upload-a"),
         destination: DestinationRef("destination-a"),
+        payload: PayloadRef("payload-a"),
         plan: ChunkPlan(totalBytes: 20, chunkSize: 4))
 
     private func transfer(_ ordinal: Int) -> PlannedTransfer {
@@ -54,16 +55,16 @@ final class InterruptionTests: XCTestCase {
 
             // Chunks 1 and 2 go out, are reported, and are then confirmed by the authority.
             for ordinal in [1, 2] {
-                let outcome = try await transport.send(transfer(ordinal), in: session)
+                let outcome = try await transport.send(transfer(ordinal), of: intent, in: session)
                 XCTAssertEqual(outcome, .reportedComplete(ChunkID(ordinal)), context)
                 _ = step(.chunkTransferReported(ChunkID(ordinal)), &state, context)
             }
-            _ = step(.authorityReported(try await transport.confirmedProgress(in: session)),
+            _ = step(.authorityReported(try await transport.confirmedProgress(for: intent.upload, in: session)),
                      &state, context)
             let beforeInterruption = state
 
             // Chunk 3 goes out and the answer never arrives.
-            let outcome = try await transport.send(transfer(3), in: session)
+            let outcome = try await transport.send(transfer(3), of: intent, in: session)
             XCTAssertEqual(outcome, .interrupted(ChunkID(3)),
                            "\(context): an interruption is the same non-answer either way")
 
@@ -78,10 +79,10 @@ final class InterruptionTests: XCTestCase {
 
             // Only now, and only from the authority, does chunk 3's fate become known.
             let scheduled = step(
-                .authorityReported(try await transport.confirmedProgress(in: session)),
+                .authorityReported(try await transport.confirmedProgress(for: intent.upload, in: session)),
                 &state, context)
 
-            guard case .send(let transfers, _, _)? = scheduled.first else {
+            guard case .send(let transfers, _, _, _)? = scheduled.first else {
                 XCTFail("\(context): the authority's answer must schedule the rest")
                 continue
             }

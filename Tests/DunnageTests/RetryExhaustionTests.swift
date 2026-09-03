@@ -17,6 +17,7 @@ final class RetryExhaustionTests: XCTestCase {
     private var intent: UploadIntent {
         UploadIntent(upload: UploadID("upload-a"),
                      destination: DestinationRef("destination-a"),
+                     payload: PayloadRef("payload-a"),
                      plan: ChunkPlan(totalBytes: 20, chunkSize: 4),
                      policy: policy)
     }
@@ -64,21 +65,21 @@ final class RetryExhaustionTests: XCTestCase {
         var state = UploadTransition.replay(log)
 
         for ordinal in [1, 2, 4] {
-            _ = try await transport.send(transfer(ordinal), in: session)
+            _ = try await transport.send(transfer(ordinal), of: intent, in: session)
             record(.chunkTransferReported(ChunkID(ordinal)), &log, &state, "opening round")
         }
-        let held = try await transport.confirmedProgress(in: session)
+        let held = try await transport.confirmedProgress(for: intent.upload, in: session)
         XCTAssertEqual(held.progress, .chunks([ChunkID(1), ChunkID(2), ChunkID(4)]),
                        "three of five chunks are what the authority holds")
         var scheduled = record(.authorityReported(held), &log, &state, "opening round")
-        XCTAssertEqual(scheduled, [.send([transfer(3), transfer(5)], session, after: .zero)],
+        XCTAssertEqual(scheduled, [.send([transfer(3), transfer(5)], intent, session, after: .zero)],
                        "nothing has been refused yet, so the first send does not wait")
 
         for round in 1...policy.maxAttemptsPerChunk {
             let context = "round \(round)"
 
-            let refusal = try await transport.send(transfer(3), in: session)
-            let interruption = try await transport.send(transfer(5), in: session)
+            let refusal = try await transport.send(transfer(3), of: intent, in: session)
+            let interruption = try await transport.send(transfer(5), of: intent, in: session)
             XCTAssertEqual(refusal, .refused(ChunkID(3)), context)
             XCTAssertEqual(interruption, .interrupted(ChunkID(5)), context)
 
@@ -101,7 +102,7 @@ final class RetryExhaustionTests: XCTestCase {
             if round < policy.maxAttemptsPerChunk {
                 XCTAssertEqual(
                     scheduled,
-                    [.send([transfer(3), transfer(5)], session,
+                    [.send([transfer(3), transfer(5)], intent, session,
                            after: policy.backoff(beforeAttempt: round + 1))],
                     "\(context): the budget is not gone, so the two outstanding chunks go again")
             } else {
@@ -142,7 +143,7 @@ final class RetryExhaustionTests: XCTestCase {
 
         var log: [UploadEvent] = [.declared(intent), .transportSessionOpened(session)]
         var state = UploadTransition.replay(log)
-        let nothing = try await transport.confirmedProgress(in: session)
+        let nothing = try await transport.confirmedProgress(for: intent.upload, in: session)
         record(.authorityReported(nothing), &log, &state, "opening round")
 
         let everyChunk = intent.plan.chunks.map { PlannedTransfer(chunk: $0,
@@ -153,13 +154,13 @@ final class RetryExhaustionTests: XCTestCase {
             for chunk in intent.plan.chunks {
                 let outcome = try await transport.send(
                     PlannedTransfer(chunk: chunk, range: intent.plan.range(of: chunk)!),
-                    in: session)
+                    of: intent, in: session)
                 XCTAssertEqual(outcome, .interrupted(chunk), context)
                 record(.chunkTransferInterrupted(chunk), &log, &state, context)
             }
             let scheduled = record(.authorityReported(nothing), &log, &state, context)
 
-            XCTAssertEqual(scheduled, [.send(everyChunk, session, after: .zero)],
+            XCTAssertEqual(scheduled, [.send(everyChunk, intent, session, after: .zero)],
                            "\(context): a flaky network neither spends the budget nor earns a wait")
             XCTAssertEqual(state.phase, .transferring, "\(context): still trying")
         }
@@ -194,7 +195,7 @@ final class RetryExhaustionTests: XCTestCase {
 
             guard case .accepted(_, let effects) =
                     UploadTransition.apply(.authorityReported(nothing), to: state),
-                  case .send(_, _, let wait)? = effects.first else {
+                  case .send(_, _, _, let wait)? = effects.first else {
                 XCTFail("attempt \(attempt): the outstanding chunks are still outstanding")
                 continue
             }
@@ -244,7 +245,7 @@ final class RetryExhaustionTests: XCTestCase {
                     count: policy.maxAttemptsPerChunk * 2)
         if case .accepted(_, let stillGoing) = UploadTransition.apply(
                 .authorityReported(nothing), to: UploadTransition.replay(hammeredInOneRound)),
-           case .send(_, _, let wait)? = stillGoing.first {
+           case .send(_, _, _, let wait)? = stillGoing.first {
             XCTAssertEqual(wait, policy.backoff(beforeAttempt: 2),
                            "six deliveries of one refusal are one attempt, so the next send is the second")
         } else {

@@ -15,6 +15,7 @@ enum EventLogContract {
     static func intent(_ upload: UploadID) -> UploadIntent {
         UploadIntent(upload: upload,
                      destination: DestinationRef("destination-\(upload.rawValue)"),
+                     payload: PayloadRef("payload-a"),
                      plan: ChunkPlan(totalBytes: 20, chunkSize: 4))
     }
 

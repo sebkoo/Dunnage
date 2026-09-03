@@ -46,7 +46,10 @@ public enum UploadEffect: Hashable, Sendable {
     /// The wait is data. Core computes it from the retry policy and the attempts already
     /// spent; the driver is the thing that waits, behind its own injected clock. Nothing in
     /// Core reads a clock, sleeps, or runs a timer.
-    case send([PlannedTransfer], TransportSessionID, after: Duration)
+    ///
+    /// It carries the intent as well as the session, because a transport that has to open
+    /// a file cannot find the payload from a transfer and a session alone (ADR-0007 §3).
+    case send([PlannedTransfer], UploadIntent, TransportSessionID, after: Duration)
     case finalize(UploadID, TransportSessionID)
     /// Give up on this upload: append `.abandoned(reason)`.
     ///
@@ -259,7 +262,7 @@ public enum UploadTransition {
             let attempt = attempts.highest(among: remaining.map(\.chunk)) + 1
             return .accepted(
                 next,
-                [.send(remaining, session, after: intent.policy.backoff(beforeAttempt: attempt))])
+                [.send(remaining, intent, session, after: intent.policy.backoff(beforeAttempt: attempt))])
         }
         return .accepted(
             .finalizing(intent: intent, session: session,

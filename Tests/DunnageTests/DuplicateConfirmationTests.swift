@@ -14,6 +14,7 @@ final class DuplicateConfirmationTests: XCTestCase {
     private let intent = UploadIntent(
         upload: UploadID("upload-a"),
         destination: DestinationRef("destination-a"),
+        payload: PayloadRef("payload-a"),
         plan: ChunkPlan(totalBytes: 20, chunkSize: 4))
     private let session = TransportSessionID("session-1")
 
@@ -72,13 +73,13 @@ final class DuplicateConfirmationTests: XCTestCase {
         let transport = InMemoryTransportDouble(shape: .setShaped)
         let live = try await transport.openSession(for: intent)
         await transport.script(.duplicate, for: ChunkID(1))
-        for ordinal in [1, 2] { _ = try await transport.send(transfer(ordinal), in: live) }
+        for ordinal in [1, 2] { _ = try await transport.send(transfer(ordinal), of: intent, in: live) }
 
         let delivered = await transport.deliveredReports
         XCTAssertEqual(delivered, [ChunkID(1), ChunkID(1), ChunkID(2)],
                        "the double must really duplicate, or this proves nothing")
 
-        let confirmation = try await transport.confirmedProgress(in: live)
+        let confirmation = try await transport.confirmedProgress(for: intent.upload, in: live)
         let asDelivered: [UploadEvent] =
             [.declared(intent), .transportSessionOpened(live)]
             + delivered.map(UploadEvent.chunkTransferReported)
@@ -154,7 +155,7 @@ final class DuplicateConfirmationTests: XCTestCase {
             }
             state = next
 
-            guard case .send(let transfers, _, _)? = effects.first else {
+            guard case .send(let transfers, _, _, _)? = effects.first else {
                 XCTFail("fold \(round): the unconfirmed chunks are still outstanding")
                 continue
             }

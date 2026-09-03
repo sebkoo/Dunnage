@@ -132,7 +132,11 @@ actor InMemoryTransportDouble: UploadTransport {
         return session
     }
 
+    /// The intent's `payload` is ignored: this double synthesises what it holds from the
+    /// transfer's range and reads no file, which is the behaviour ADR-0006 O-12 said hid
+    /// the gap a cold start has, and ADR-0007 §8 keeps it so on purpose.
     func send(_ transfer: PlannedTransfer,
+              of intent: UploadIntent,
               in session: TransportSessionID) async throws -> TransferOutcome {
         calls.append(.sent(transfer.chunk))
         guard var state = sessions[session] else { throw TransportError.unknownSession }
@@ -169,9 +173,15 @@ actor InMemoryTransportDouble: UploadTransport {
         }
     }
 
-    func confirmedProgress(in session: TransportSessionID) async throws -> Confirmation {
+    /// An authority asked about an operation under another upload has no record of it:
+    /// the session was opened for one upload, and a question naming a different one is a
+    /// question about an operation that does not exist (ADR-0007 §3).
+    func confirmedProgress(for upload: UploadID,
+                           in session: TransportSessionID) async throws -> Confirmation {
         calls.append(.asked(session))
-        guard let state = sessions[session] else { throw TransportError.unknownSession }
+        guard let state = sessions[session], state.intent.upload == upload else {
+            throw TransportError.unknownSession
+        }
 
         let progress: ConfirmedProgress
         switch shape {

@@ -19,6 +19,7 @@ enum RecordedLogs {
     static var intent: UploadIntent {
         UploadIntent(upload: upload,
                      destination: DestinationRef("destination-a"),
+                     payload: PayloadRef("payload-a"),
                      plan: ChunkPlan(totalBytes: 20, chunkSize: 4))
     }
 

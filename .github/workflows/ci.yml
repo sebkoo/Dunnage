@@ -277,6 +277,7 @@ jobs:
           check 2 6
           check 3 7
           check 4a 6
+          check 5 1
           exit $failed
 
   commit-message-hygiene:

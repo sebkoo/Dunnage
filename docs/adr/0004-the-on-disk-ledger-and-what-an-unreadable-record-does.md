@@ -200,6 +200,8 @@ device, and no test in this repository makes it.
 - **No migration.** Format version 1 is the only version, and the reader refuses anything
   else rather than translating it. A second version needs a reader that has seen two, and
   there has only ever been one.
+  *Superseded in part by ADR-0007 §8: the format is 2 from phase 5, and a version-1
+  header is refused rather than migrated.*
 
 ## Open questions
 
