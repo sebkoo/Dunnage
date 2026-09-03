@@ -42,6 +42,11 @@ public enum TransportError: Error, Hashable, Sendable {
     /// Finalization was asked for while the authority does not hold every unit. An
     /// uploaded part is not a completed object.
     case incompleteUpload
+
+    /// This transport never minted this identity. Not `.unknownSession`: "the authority
+    /// has forgotten the operation" and "this string was never ours" are different facts
+    /// that strand the upload the same way (ADR-0007 §8).
+    case unrecognisedSession
 }
 
 public protocol UploadTransport: Sendable {

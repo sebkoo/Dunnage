@@ -186,4 +186,6 @@ numbered procedure on a real iPhone, recorded and never a CI claim). See
 for what each tier does and does not establish. The named tests are in
 [`docs/invariants.md`](docs/invariants.md).
 
+- A background task names one chunk of one upload, and a task this transport did not name is never read as progress
 - A cold start finds the payload on the log, and a chunk file is a cache bounded by the in-flight set
+- Phase 5's doubles keep the contracts they stand in for

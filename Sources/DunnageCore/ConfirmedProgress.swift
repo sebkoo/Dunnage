@@ -5,8 +5,10 @@
 // different things, and Core does not translate one into the other.
 
 /// Identity of one transport operation — the thing an authority scopes its statements to.
-/// On S3 multipart this is the `uploadId`: part 3 of one operation and part 3 of another
-/// are unrelated facts.
+/// Opaque to Core: never parsed here, only carried and compared whole. On the S3 transport
+/// the raw value is `<ref>/<uploadId>` — it contains the multipart `uploadId` and is not
+/// it — and only the transport composes and reads it (ADR-0006 §2). Part 3 of one
+/// operation and part 3 of another remain unrelated facts.
 public struct TransportSessionID: Hashable, Sendable {
     public let rawValue: String
     public init(_ rawValue: String) { self.rawValue = rawValue }

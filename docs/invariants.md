@@ -413,10 +413,10 @@ Refused, and not repaired into something acceptable. Sanitising maps two distinc
 onto one key, and two uploads that the caller kept apart then become one object.
 
 The separator is the exclusion that carries weight beyond this phase. A `TransportSessionID`
-is `<ref> "/" <uploadId>`, and 4b's `parseSession` splits it on the first `/`; that parse is
-total only because no reference this server accepts contains one. Different language,
-different suite, different phase, and nothing a compiler or a test runner sees connects the
-two — so the rule lives in
+is `<ref> "/" <uploadId>`, and phase 5's `parseSession` splits it on the first `/`; that
+parse is total only because no reference this server accepts contains one. Different
+language, different suite, different phase, and nothing a compiler or a test runner sees
+connects the two — so the rule lives in
 [ADR-0006](adr/0006-the-control-plane-and-the-identity-it-composes.md) §2, and
 `testARefContainingASeparatorIsRefused` is the only thing that enforces it.
 
@@ -544,6 +544,29 @@ named test kills the process and reads the relaunch from outside. The device har
 numbered procedure on a real iPhone, recorded and never CI's evidence. Nothing under this
 heading touches a session.
 
+### A background task names one chunk of one upload, and a task this transport did not name is never read as progress
+
+All five are deterministic, under `swift test`. The description is the one string the
+system persists with a task across relaunch, so it is all a relaunched process has to say
+whose task it is. It is a JSON object with sorted keys and not a joined string, because
+both the upload id and the composed session identity may contain `/`, and a delimiter that
+either side may contain is a parse that is not total (ADR-0007 §4). The composed identity
+is `<ref>/<uploadId>`, split on the first separator so an upload id may contain one, and
+exactly three inputs are refused with `.unrecognisedSession` — no separator, an empty ref,
+an empty uploadId; the list is three and not two only while ADR-0006 §4's third falsifier
+holds, that S3 never returns an empty upload id. The parse's call site carries the comment
+ADR-0006 §2 requires, naming `testARefContainingASeparatorIsRefused` as the only thing
+that keeps it total. A task whose description does not decode — a missing key, a chunk
+below one, a session that does not parse, a key this transport never writes, or a string
+that is not the one this transport writes for those values — is cancelled at adoption and
+never registered, so nothing it might seem to show reaches any upload.
+
+- `testATaskDescriptionRoundTripsAndItsKeysAreSorted`
+- `testADescriptionThisTransportDidNotMintDecodesToNothing`
+- `testASessionIdentitySplitsOnTheFirstSeparatorSoAnUploadIdMayContainOne`
+- `testExactlyThreeInputsAreNotASessionThisTransportMinted`
+- `testATaskWhoseDescriptionThisTransportDidNotMintIsCancelledAndNeverReadAsProgress`
+
 ### A cold start finds the payload on the log, and a chunk file is a cache bounded by the in-flight set
 
 All five are deterministic, under `swift test`. ADR-0006 O-12 found the gap: a relaunched
@@ -566,3 +589,18 @@ contract is.
 - `testAChunkFileHoldsExactlyTheSpanThePlanNames`
 - `testTheChunkFilesThatExistAtOnceAreBoundedByTheInFlightSet`
 - `testAPayloadShorterThanThePlanIsRefusedRatherThanWrittenShort`
+
+### Phase 5's doubles keep the contracts they stand in for
+
+All three are deterministic, under `swift test`. The scripted wire stands in for
+`PartTaskSession`, this repository's contract for the daemon and the wire together, and
+never for `URLSession`: a double of a vendor's product runs a guess against itself
+(ADR-0007 §9). It holds exactly the tasks seeded or created and forgets a cancelled one,
+delivers each completion once in the order the test gave them, and counts a receipt per
+task created whose description names a part and none for one that does not parse. This
+claim grows once, in commit 7, when the stand-in's own tests and its parity diff against
+the plane arrive with the stand-in.
+
+- `testTheScriptedWireHoldsExactlyTheTasksCreatedOrSeededAndForgetsACancelledOne`
+- `testTheScriptedWireDeliversEachCompletionOnceInTheOrderTheTestGaveThem`
+- `testTheScriptedWireCountsAReceiptPerTaskCreatedAndNoneForAnUnparseableOne`
