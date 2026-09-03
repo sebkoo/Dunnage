@@ -9,10 +9,11 @@ Durable, resumable background uploads for iOS.
 
 A successful HTTP request is not the same thing as a durable upload.
 
-**Status:** Core, the durable ledger and the driver — intent model, total transition
-table, append-only event log with a file-backed implementation, the transport boundary
-with an in-memory double, and the driver that executes Core's effects behind an injected
-clock. No real transport, no AWS, no app.
+**Status:** Core, the durable ledger, the driver and the control plane — intent model,
+total transition table, append-only event log with a file-backed implementation, the
+transport boundary with an in-memory double, the driver that executes Core's effects
+behind an injected clock, and a CDK stack with four handlers that synthesise with no
+cloud credentials. Nothing is deployed. No real transport, no app.
 
 Three mechanisms this library keeps apart, because none of them implies the others:
 
@@ -35,8 +36,8 @@ decisions are in [docs/adr/](docs/adr/).
 
 ## Bird's-eye view
 
-Where this package sits in the whole system. One layer exists. Everything else is
-named so that its absence is legible.
+Where this package sits in the whole system. This package exists, the control plane
+exists as code only, and everything else is named so that its absence is legible.
 
 ```
                             iOS device
@@ -44,7 +45,7 @@ named so that its absence is legible.
      App                                         phase 5   not built
        choose a file, watch it finish
    ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─
-     Transport                                   phase 4   not built
+     Transport                                   phase 4b  not built
        owns the background URLSession, speaks S3 multipart
        against the presigned URLs the control plane issues
    ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─
@@ -74,12 +75,12 @@ named so that its absence is legible.
 
                                AWS
    ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─
-     CONTROL PLANE                               phase 4   not built
+     CONTROL PLANE                               phase 4a  code only
        Cognito → API Gateway → Lambda
        issues short, narrow presigned URLs, and reports which
        parts S3 holds — s3:ListMultipartUploadParts stays here
    ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─
-     DATA PLANE                                  phase 4   not built
+     DATA PLANE                                  phase 4b  not built
        S3 multipart upload — which part numbers exist
    ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─
 ```
@@ -98,7 +99,8 @@ No percentages. A named invariant either exists or it does not.
 | **1. Core** | A chunk the transport authority has confirmed is never re-sent, under an identity and payload contract Core does not interpret, and no two ways of not being confirmed are treated as one. | landed — 39 named tests |
 | **2. Durable ledger** | The log outlives the process that wrote it: replaying it from disk reproduces state exactly, and a file that is not a log says so rather than deriving one. ADR-0001 O-1 was the open question here; ADR-0004 decides it. | landed — 21 named tests |
 | **3. Driver** | The driver executes Core's effects and records what a transport answered, and concludes nothing of its own: a transfer it stopped waiting for is not a refusal, the attempt tally is not the driver's to keep, and an upload is given up on because Core asked for it. | landed — 22 named tests |
-| **4. Transport, control plane and data plane** | The bound holds against a real transport: after an interruption, redundant transfer is bounded by the chunks that were in flight and unconfirmed. The device never holds an AWS credential, the server derives object ownership from the authenticated principal, and `cdk synth` runs with no cloud credentials. | in progress — 4a is landing claim by claim below; this row splits into 4a and 4b when 4a is complete |
+| **4a. Control plane** | The half of phase 4 a reader can check with no AWS account: a stack that synthesises without one, and a control plane that decides where a caller's bytes may land from the token it verified rather than from anything the caller sent. | landed — 23 named tests, vitest on a second runner |
+| **4b. Transport and data plane** | The bound holds against a real transport: after an interruption, redundant transfer is bounded by the chunks that were in flight and unconfirmed. | not started |
 | **5. App** | The invariant survives real lifecycle events. A simulated process death is not a SIGKILL, and phase 1 does not claim otherwise. | not started |
 
 ## Phase 1: Core — a chunk the authority has confirmed is never re-sent
@@ -158,3 +160,16 @@ phase is evidence about any AWS account. See
 - The object key is derived from the authenticated principal, and a field the client sends never reaches it
 - A reference the caller supplies names a leaf inside its own prefix or it is refused, never repaired
 - The control plane holds nothing its routes do not use, and every principal that can enumerate parts is one this stack defines and no device can become
+- The failure mode a client-trusted key reintroduces, kept working on purpose
+
+Everything above, on a machine with no AWS account, no SSO session and no cloud
+configuration:
+
+```
+cd cloud && npm ci && npm run build && npm test && npx cdk synth --no-lookups
+```
+
+The build comes first because `cloud/cdk.json` is `{"app": "node dist/app.js"}` and
+`cloud/dist/` is not committed, so in a fresh clone the synth has no app to run until
+the build has written one; `--no-lookups` is the flag CI passes, and it guards against a
+`fromLookup` arriving later rather than doing anything today.

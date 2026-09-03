@@ -477,3 +477,54 @@ documented AWS behaviour, not something this phase executed.
 - `testEachFunctionRoleHoldsOnlyThePermissionsItsOwnRouteUses`
 - `testEveryPrincipalThatCanEnumeratePartsIsOneThisStackDefines`
 - `testNothingInThisTemplateMayAbortAMultipartUpload`
+
+### The failure mode a client-trusted key reintroduces, kept working on purpose
+
+Phase 1's control is bytes re-sent that were confirmed. Phase 2's is bytes skipped that
+were not. Phase 3's is an upload abandoned that nothing was wrong with. This one is none
+of those: every byte goes exactly once, to exactly the object the request named, and two
+callers who were never told apart anywhere else end up sharing it.
+
+`cloud/test/client-trusted-key.ts` is `handlers/create.ts` with one line different — the
+key read out of the request body instead of composed by `objectKey(sub, ref)`. Nothing
+else about it is wrong. It verifies the token, refuses a request whose token carries no
+`sub`, and refuses a reference the grammar rejects, all before it acts and all with
+create's own status codes and reasons. The fault is upstream of every check it makes, in
+what it believes about the request, and the 200 it answers is then correct about a key
+that was never its to choose.
+
+Two callers, `sub-1` and `sub-2`, one reference, and the same `key` in both bodies. The
+control answers both and hands back one object. The same two requests through
+`verifiedSub` and then `objectKey` produce two keys, because `objectKey` has no third
+parameter the body's `key` could arrive through — the difference is the composition and
+not the diligence of the handler around it.
+
+The first of the three tests is what makes the other two mean what they claim. The
+control's answers to a missing `sub` and to `../etc` are compared against create's rather
+than restated, so the collision below is evidence about a client-trusted *key* and not
+about some handler that refuses nothing — a handler answering 200 to everything would
+collide too, and would establish nothing. Both handlers are asked through one `respond`,
+in `support.ts`, because a comparison between two handlers has to be made with one
+instrument.
+
+The control stops where every test of a real handler in this phase stops. create's 200
+branch calls S3 and no test here reaches an S3 call, so the control returns the key it
+would have used where create returns an uploadId — a failure that happened inside a call
+this machine cannot make would demonstrate nothing. That is a second difference from
+create, and it is named rather than folded into the first.
+
+It lives under `cloud/test/` and never under `cloud/handlers/`, and four things make it
+inert rather than merely filed out of the way. `vitest.config.mts` includes only
+`test/**/*.test.ts`, so it is imported by a suite and never collected as one.
+`SOURCE_DIRS` in `synth.test.ts` is `['bin', 'lib', 'handlers']`, so claim 1's scan over
+the stack's own sources never reads it. The build script names `handlers/*.ts` one by one,
+so nothing bundles it into a Lambda asset and no route could reach it. And `tsconfig.json`
+includes `test`, so it is typechecked under the same strict settings as everything else:
+inert is not unchecked.
+
+It is never "fixed". If the client-trusted handler stops putting two callers on one
+object, the control has been broken and `create` has nothing left to be measured against.
+
+- `testTheClientTrustedKeyHandlerKeepsTheContractItIsMeasuredAgainst`
+- `testAClientTrustedKeyPutsTwoCallersOnOneObject`
+- `testTheDerivedKeyAfterTheSameTwoRequestsKeepsTheCallersApart`

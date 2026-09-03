@@ -1,4 +1,4 @@
-import type { APIGatewayProxyEventV2WithJWTAuthorizer } from 'aws-lambda'
+import type { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyStructuredResultV2 } from 'aws-lambda'
 import { objectKey, verifiedSub } from '../handlers/identity'
 
 // Not a `*.test.ts` file, and vitest.config.mts includes only `test/**/*.test.ts`, so this
@@ -68,4 +68,49 @@ export function keyFor(e: APIGatewayProxyEventV2WithJWTAuthorizer): string | und
   if (sub === undefined) return undefined
   const ref = (JSON.parse(e.body ?? '{}') as { ref?: unknown }).ref
   return typeof ref === 'string' ? objectKey(sub, ref) : undefined
+}
+
+// Exported for the same reason `respond` is: two suites hold arrays of handlers to ask.
+export type Handler = (
+  event: APIGatewayProxyEventV2WithJWTAuthorizer,
+) => Promise<APIGatewayProxyStructuredResultV2>
+
+// One handler's answer, with a throw recorded as an answer rather than raised. A handler
+// that throws inside a `Promise.all` takes the whole array with it, and the run then
+// reports one name where several were asked — the shape this repository's testing rule
+// refuses. It is reachable rather than theoretical: a handler whose refusals were removed
+// reaches a client construction, and that fails outright on a machine with no region and no
+// credential. So the throw becomes that handler's row, and the ones that answered still
+// report.
+//
+// It lives here rather than in the suite that first needed it because two suites now
+// measure with it, and the negative control's first test compares the control's answers
+// against `create`'s. Two copies of this function are two instruments that can drift, and
+// that comparison would then be between the instruments rather than between the handlers.
+// Two concrete call sites, in the tree, today — not an abstraction kept for a third that
+// might arrive.
+export type Answer = {
+  readonly statusCode: number | string | undefined
+  readonly reason: unknown
+  readonly rendered: string
+}
+
+export async function respond(
+  handler: Handler,
+  requested: APIGatewayProxyEventV2WithJWTAuthorizer,
+): Promise<Answer> {
+  try {
+    const res = await handler(requested)
+    // The refusal's own reason, read out of the body every handler answers with. A status
+    // code alone does not say which guard produced it, and the guards answer differently.
+    let reason: unknown
+    try {
+      reason = (JSON.parse(res.body ?? '{}') as { error?: unknown }).error
+    } catch {
+      reason = undefined
+    }
+    return { statusCode: res.statusCode, reason, rendered: JSON.stringify(res) }
+  } catch (thrown) {
+    return { statusCode: `threw ${String(thrown)}`, reason: undefined, rendered: '' }
+  }
 }

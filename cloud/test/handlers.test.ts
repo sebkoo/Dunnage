@@ -1,46 +1,9 @@
-import type { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyStructuredResultV2 } from 'aws-lambda'
 import { describe, expect, test } from 'vitest'
 import * as complete from '../handlers/complete'
 import * as create from '../handlers/create'
 import * as parts from '../handlers/parts'
 import * as urls from '../handlers/urls'
-import { event, keyFor } from './support'
-
-type Handler = (
-  event: APIGatewayProxyEventV2WithJWTAuthorizer,
-) => Promise<APIGatewayProxyStructuredResultV2>
-
-// One handler's answer, with a throw recorded as an answer rather than raised. A handler that
-// throws inside the `Promise.all` below takes the whole array with it, and the run then reports
-// one name where four were asked — which is the shape this repository's testing rule refuses,
-// and it is reachable rather than theoretical: a handler whose refusals were removed reaches a
-// client construction, and that fails outright on a machine with no region and no credential.
-// So the throw becomes this handler's row, and the three that answered still report.
-type Answer = {
-  readonly statusCode: number | string | undefined
-  readonly reason: unknown
-  readonly rendered: string
-}
-
-async function respond(
-  handler: Handler,
-  requested: APIGatewayProxyEventV2WithJWTAuthorizer,
-): Promise<Answer> {
-  try {
-    const res = await handler(requested)
-    // The refusal's own reason, read out of the body every handler answers with. A status
-    // code alone does not say which guard produced it, and the guards answer differently.
-    let reason: unknown
-    try {
-      reason = (JSON.parse(res.body ?? '{}') as { error?: unknown }).error
-    } catch {
-      reason = undefined
-    }
-    return { statusCode: res.statusCode, reason, rendered: JSON.stringify(res) }
-  } catch (thrown) {
-    return { statusCode: `threw ${String(thrown)}`, reason: undefined, rendered: '' }
-  }
-}
+import { type Handler, event, keyFor, respond } from './support'
 
 // All four routes ADR-0006 §4 gives a handler. Every refusal below is asked of all four,
 // because the refusal is the shape they share and a handler that skipped it would be the one
