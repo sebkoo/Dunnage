@@ -18,6 +18,7 @@ final class TransportAdoptionTests: XCTestCase {
         let garbage = await wire.seedPending(description: "garbage")
 
         let transport = BackgroundSessionTransport(
+            plane: CannedPlane { _ in XCTFail("adoption asked the plane"); throw CancellationError() },
             tasks: wire,
             chunkFiles: ChunkFiles(directory: try temporaryDirectory(), resolve: { _ in URL(fileURLWithPath: "/") }))
         await transport.adopt()
@@ -31,5 +32,31 @@ final class TransportAdoptionTests: XCTestCase {
                       "a task this transport did not name was kept: \(journal)")
         XCTAssertFalse(journal.contains(.cancel(named)),
                        "a task this transport did name was cancelled: \(journal)")
+    }
+
+    /// Two pending tasks under one description, ids 1 and 2. Adoption keeps the first —
+    /// the lowest id, after sorting, because the session promises no order — and cancels
+    /// the other; the chunk is in flight once.
+    func testAdoptionKeepsTheFirstTaskPerChunkAndCancelsADuplicate() async throws {
+        let wire = ScriptedWire()
+        let description = #"{"chunk":3,"session":"r/u","upload":"a"}"#
+        let first = await wire.seedPending(description: description)
+        let duplicate = await wire.seedPending(description: description)
+        XCTAssertEqual([first, duplicate], [PartTaskID(1), PartTaskID(2)],
+                       "the wire did not mint the ids this test's rule is stated against")
+
+        let transport = BackgroundSessionTransport(
+            plane: CannedPlane { _ in XCTFail("adoption asked the plane"); throw CancellationError() },
+            tasks: wire,
+            chunkFiles: ChunkFiles(directory: try temporaryDirectory(), resolve: { _ in URL(fileURLWithPath: "/") }))
+        await transport.adopt()
+
+        let journal = await wire.journal
+        XCTAssertTrue(journal.contains(.cancel(duplicate)),
+                      "the duplicate task was kept: \(journal)")
+        XCTAssertFalse(journal.contains(.cancel(first)),
+                       "the first task was cancelled: \(journal)")
+        let inFlight = await transport.inFlightChunks(of: UploadID("a"))
+        XCTAssertEqual(inFlight, [ChunkID(3)], "chunk 3 is not in flight exactly once")
     }
 }

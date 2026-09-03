@@ -567,6 +567,43 @@ never registered, so nothing it might seem to show reaches any upload.
 - `testExactlyThreeInputsAreNotASessionThisTransportMinted`
 - `testATaskWhoseDescriptionThisTransportDidNotMintIsCancelledAndNeverReadAsProgress`
 
+### A chunk has at most one transfer in flight, and a send for a chunk already in flight waits on it rather than starting another
+
+All eight are deterministic, under `swift test`. A `send` adopts the task already running
+for its `(session, chunk)` or creates exactly one, and awaits it; two sends that race create
+one, because the description is marked as creating before the first await and the second
+send finds the mark. Adoption keeps one task per description, the lowest id after sorting by
+id — the rule must not depend on the order the session lists them, which `URLSession` does
+not promise — and cancels the rest. The injected fault is the cancelled await, which is what
+the driver's timeout does: it resumes the await throwing `CancellationError`, removes its
+waiter, and touches nothing in the journal, and a second send for the chunk creates nothing
+(ADR-0007 §4; the coincidence ADR-0005 §5 named ends here). A creation that fails resumes
+every send waiting on that chunk with the same error, because a waiter must always have a
+task or an error and one on a creation that failed waits on nothing; the driver treats it
+as any thrown error (ADR-0005 §8). URLs are minted at `send`, every
+send, so the task's life and the URL's begin together and the transport holds no cache and
+no clock (ADR-0007 §6, F2). The control plane is reached through `PlaneExchange`, a request
+in and a response out, and the routes' bytes are `ControlPlaneWire`'s pure functions; claim
+6 does not grow here, because the canned plane is a closure the test hands in, with its
+answers and its request journal local to the test, and a wrapper that holds no state keeps
+no contract a test could check. This commit calls `POST /uploads` from `openSession` and
+`POST /uploads/{ref}/urls` from `send`, and not yet `parts` or `complete`; the
+`UploadTransport` conformance is commit 5's, when all four exist, and nothing yet resumes a
+waiter with an outcome. On the wire, 400, 401 and 403 are `refused`, and any other status
+outside 2xx is `unexpectedStatus`: a 5xx is the plane failing, not refusing, and the two are
+kept apart for the reason Core keeps a refusal and an interruption apart. The
+`.noSuchUpload` reading of 404 is provisional — the stand-in's, until 4b shows what the
+plane renders (ADR-0007 §9, item 2).
+
+- `testTheCreateAndUrlsRoutesAreBuiltAndReadExactlyAsThePlaneSpeaksThem`
+- `testOpenSessionAsksThePlaneOnceAndComposesTheIdentityFromItsAnswer`
+- `testASendMintsItsURLAtSendAndCreatesOneTaskNamedForTheChunk`
+- `testAChunkHasAtMostOneTransferInFlightWhenTwoSendsRace`
+- `testASendForAChunkAlreadyInFlightWaitsOnItRatherThanStartingAnother`
+- `testAdoptionKeepsTheFirstTaskPerChunkAndCancelsADuplicate`
+- `testAnAwaitCancelledMidTransferLeavesTheTaskRunningAndASecondSendCreatesNothing`
+- `testWaitersOnAChunkWhoseCreationFailedAreResumedWithTheFailure`
+
 ### A cold start finds the payload on the log, and a chunk file is a cache bounded by the in-flight set
 
 All five are deterministic, under `swift test`. ADR-0006 O-12 found the gap: a relaunched
