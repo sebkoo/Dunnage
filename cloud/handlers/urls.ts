@@ -15,7 +15,11 @@ import { objectKey, validateRef, verifiedSub } from './identity'
 // `testAPresignedURLIsScopedToOneMethodOneKeyOnePartAndAShortExpiry` signs with an expiry of
 // its own and asserts that exact value comes back. It has to be the exact value: the
 // presigner's default is 900, so an assertion that the URL merely expires within 900 seconds
-// is satisfied by a URL that was signed with no expiry at all.
+// is satisfied by a URL that was signed with no expiry at all. The other end of this number,
+// which ADR-0007 §6 requires each site to name, is `URLSessionPartTasks.partTransferLifetime`
+// in `Sources/DunnageTransport/`, the background session's `timeoutIntervalForResource`: that
+// timeout is a ceiling over this expiry, so lowering this number without lowering that one
+// leaves a ceiling that bounds nothing.
 const EXPIRES_IN_SECONDS = 900
 
 // S3's part numbers run 1 through 10000, so an unbounded count is a request to sign an
