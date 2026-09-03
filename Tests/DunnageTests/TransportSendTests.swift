@@ -146,7 +146,8 @@ final class TransportSendTests: XCTestCase {
         XCTAssertEqual(requests, [ControlPlaneWire.urls(ref: "r", uploadId: "u", parts: 5)],
                        "the URL was not minted at send by one urls request for the plan's parts")
         let calls = await f.wire.journal
-        XCTAssertEqual(calls, [created], "the wire saw something other than one task named for chunk 1")
+        XCTAssertEqual(calls, [created, .start(PartTaskID(1))],
+                       "the wire saw something other than one task named for chunk 1, created then started")
         let puts = await f.wire.puts(part: 1)
         XCTAssertEqual(puts, 1, "part 1 was not created exactly once")
         XCTAssertEqual(try f.chunkFiles.present(for: f.intent.upload), [ChunkID(1)],
@@ -170,7 +171,7 @@ final class TransportSendTests: XCTestCase {
         }
 
         let calls = await f.wire.journal
-        XCTAssertEqual(calls, [.createTask(description: f.description(1).encoded)],
+        XCTAssertEqual(calls, [.createTask(description: f.description(1).encoded), .start(PartTaskID(1))],
                        "two sends that raced did not create exactly one task")
         let requests = await journal.requests
         XCTAssertEqual(requests, [ControlPlaneWire.urls(ref: "r", uploadId: "u", parts: 5)],

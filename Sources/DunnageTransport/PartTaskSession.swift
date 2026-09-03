@@ -54,7 +54,15 @@ public protocol PartTaskSession: Sendable {
     func pendingTasks() async -> [PendingTask]
 
     /// Create an upload task for `file` against `url`, persisted under `description`.
+    ///
+    /// The task is created and not begun. That is `URLSession`'s own shape — a task is
+    /// made, then `resume()`d — and the session holds a created task until it is started,
+    /// so nothing it will report can arrive before the caller has named it.
     func createTask(description: String, file: URL, url: URL) async throws -> PartTaskID
+
+    /// Begin a task this session created. Only from here can the session report anything
+    /// about it.
+    func start(_ id: PartTaskID) async
 
     /// Cancel a task. The daemon stops it and forgets it.
     func cancel(_ id: PartTaskID) async

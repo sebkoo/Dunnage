@@ -21,6 +21,7 @@ actor ScriptedWire: PartTaskSession {
     enum Call: Hashable, Sendable {
         case pendingTasks
         case createTask(description: String)
+        case start(PartTaskID)
         case cancel(PartTaskID)
     }
 
@@ -31,6 +32,7 @@ actor ScriptedWire: PartTaskSession {
     private var held: [PendingTask] = []
     private var nextID = 1
     private var receipts: [Int: Int] = [:]
+    private var completionOnStart: PartTaskCompletion?
 
     init() {
         (completions, continuation) = AsyncStream<TaskCompletion>.makeStream()
@@ -46,6 +48,13 @@ actor ScriptedWire: PartTaskSession {
     /// Deliver one completion, in the order these calls are made.
     func complete(_ id: PartTaskID, with completion: PartTaskCompletion) {
         continuation.yield(TaskCompletion(id: id, completion: completion))
+    }
+
+    /// Report this completion for a task the moment it is started — the earliest a session
+    /// can say anything about a task, and the instant a transport that named its tasks too
+    /// late would miss.
+    func completeOnStart(_ completion: PartTaskCompletion) {
+        completionOnStart = completion
     }
 
     /// How many tasks were created whose description names this part.
@@ -66,6 +75,13 @@ actor ScriptedWire: PartTaskSession {
             receipts[named.chunk.ordinal, default: 0] += 1
         }
         return mint(description)
+    }
+
+    func start(_ id: PartTaskID) async {
+        journal.append(.start(id))
+        if let completion = completionOnStart {
+            continuation.yield(TaskCompletion(id: id, completion: completion))
+        }
     }
 
     func cancel(_ id: PartTaskID) async {

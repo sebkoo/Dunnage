@@ -52,4 +52,10 @@ public enum ControlPlaneError: Error, Hashable, Sendable {
     case noSuchUpload
     /// A 2xx whose body is not the route's shape.
     case unreadableAnswer(status: Int)
+    /// The complete route's own refusal: a 400 whose body is `{"error":"incomplete
+    /// upload"}`. It is a `refused` the transport can name, and it is named here because
+    /// the transport turns it into `TransportError.incompleteUpload` and the driver's
+    /// caller is entitled to the difference between "the authority does not hold every
+    /// part" and "the request was malformed". Only the complete route produces it.
+    case incompleteUpload
 }

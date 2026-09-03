@@ -158,6 +158,15 @@ adopted or created task for `(session, chunk)`; if one is in flight it awaits th
 completion and does not create another. Otherwise it materialises the chunk file, obtains a
 URL for the part (§6), creates the upload task with the description above, and awaits it.
 
+**A task is registered before it is started.** `PartTaskSession` separates creating a task
+from starting it, as `URLSession` does — a task is made, then `resume()`d — and `send`
+creates, registers, then starts. Started first, a task could be reported on while the
+registry did not yet hold its id, and the completion would be dropped as not this
+transport's: the send would wait for an answer that had been and gone, and every later send
+for that chunk would adopt a dead entry. This constrains the session written in the next
+commit: `URLSessionPartTasks.createTask` must not call `resume()`, and `start(_:)` is where
+the resume goes.
+
 The await is a continuation the delegate resumes. **The driver's timeout cancels the await,
 never the task.** The task's lifetime is the daemon's, bounded by the session's resource
 timeout (§6). A transfer therefore outlives the driver that started it, which is the

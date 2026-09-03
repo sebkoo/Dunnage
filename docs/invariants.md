@@ -586,16 +586,16 @@ no clock (ADR-0007 §6, F2). The control plane is reached through `PlaneExchange
 in and a response out, and the routes' bytes are `ControlPlaneWire`'s pure functions; claim
 6 does not grow here, because the canned plane is a closure the test hands in, with its
 answers and its request journal local to the test, and a wrapper that holds no state keeps
-no contract a test could check. This commit calls `POST /uploads` from `openSession` and
-`POST /uploads/{ref}/urls` from `send`, and not yet `parts` or `complete`; the
-`UploadTransport` conformance is commit 5's, when all four exist, and nothing yet resumes a
-waiter with an outcome. On the wire, 400, 401 and 403 are `refused`, and any other status
-outside 2xx is `unexpectedStatus`: a 5xx is the plane failing, not refusing, and the two are
-kept apart for the reason Core keeps a refusal and an interruption apart. The
-`.noSuchUpload` reading of 404 is provisional — the stand-in's, until 4b shows what the
-plane renders (ADR-0007 §9, item 2).
+no contract a test could check. `openSession` calls `POST /uploads` and `send` calls `POST
+/uploads/{ref}/urls`; the first test above holds all four routes beside the handlers that
+speak them, because the pure half is one function per route and reads no state. On the
+wire, 400, 401 and 403 are `refused`, and any other status outside 2xx is
+`unexpectedStatus`: a 5xx is the plane failing, not refusing, and the two are kept apart
+for the reason Core keeps a refusal and an interruption apart. The `.noSuchUpload` reading
+of 404 is provisional — the stand-in's, until 4b shows what the plane renders (ADR-0007 §9,
+item 2).
 
-- `testTheCreateAndUrlsRoutesAreBuiltAndReadExactlyAsThePlaneSpeaksThem`
+- `testEachRouteIsBuiltAndReadExactlyAsThePlaneSpeaksIt`
 - `testOpenSessionAsksThePlaneOnceAndComposesTheIdentityFromItsAnswer`
 - `testASendMintsItsURLAtSendAndCreatesOneTaskNamedForTheChunk`
 - `testAChunkHasAtMostOneTransferInFlightWhenTwoSendsRace`
@@ -604,9 +604,58 @@ plane renders (ADR-0007 §9, item 2).
 - `testAnAwaitCancelledMidTransferLeavesTheTaskRunningAndASecondSendCreatesNothing`
 - `testWaitersOnAChunkWhoseCreationFailedAreResumedWithTheFailure`
 
+### What a session reported is an answer the driver received, and confirmed progress comes only from what the authority holds
+
+All nine are deterministic, under `swift test`. The completion listener maps each
+completion the session reports to exactly one outcome and to no other: a 2xx is a report, a
+status that is not 2xx is a refusal — the transport answered, and the answer was no — and no
+answer at all is an interruption (ADR-0007 §5). The ETag is not read, because the session
+never sees one. A completion no send was awaiting is held in memory, handed to the first
+send that asks for that chunk and then forgotten; it never reaches the log, because the log
+records answers a driver received and a driver that never asked was never answered. A
+completion whose id is registered under no description — a task cancelled at adoption still
+reports — is dropped, because it is not evidence about any upload. The listener starts with
+`adopt()` and not in `init`, as one `Task` that runs for the process's lifetime and is
+never cancelled; that it is started once is a code guard and not an invariant with a test,
+because two iterators on one `AsyncStream` split its elements rather than duplicating them
+and a second listener is not observable from outside. Either way a completion takes its
+task out of the registry, which is the expired-URL path (ADR-0007 §6): a PUT presented with
+a URL that has expired is refused, and the next send for that chunk creates anew with a URL
+minted at that send. **A task is registered before it is started**, so a completion can
+never arrive for a task this transport has not yet named: `PartTaskSession` separates
+creating a task from starting it, as `URLSession` does, and `send` creates, registers, then
+starts. Started first, a completion could name an id the registry did not hold yet and be
+dropped as not this transport's, leaving a send waiting on an answer that had been and gone
+and every later send adopting a dead entry — ordering removes that rather than a rule about
+what to do afterwards (ADR-0007 §4). Confirmed progress comes from `GET
+/uploads/{ref}/parts` and from nothing else, whatever any completion said (ADR-0001 §3);
+the answer is set-shaped because the authority's is, a part number below one or one that is
+not an integer is refused rather than filtered away, and reading past the one page
+`parts.ts` serves is 4b's. `finalize` names one refusal: a complete over parts the authority
+does not hold, which the plane today cannot make — it does not know the plan's N and
+completes over whatever `ListParts` returns — so the stand-in's 400 is what the case is
+written against, and Core finalizes only once every chunk is confirmed, which leaves the
+authority having lost a part between the ask and the complete. The last two tests are the
+ones that could not be written before: the driver one is the sentence ADR-0005 §5 could not
+make, a transfer that outlives the wait the driver gave it and is answered by the next send
+without a second task, and the listener one is the only test here that goes through the
+session rather than calling the listener's `deliver` directly, so the wiring `adopt()`
+starts is covered rather than assumed. With all four calls on the actor,
+`BackgroundSessionTransport` declares its `UploadTransport` conformance.
+
+- `testEachCompletionBecomesTheOneOutcomeThatMeansIt`
+- `testACompletionNoSendWasAwaitingIsHandedToTheFirstSendThatAsksAndThenForgotten`
+- `testACompletionForATaskThisTransportDidNotNameIsDropped`
+- `testAPutPresentedWithAnExpiredURLIsRefusedAndTheNextSendMintsAFreshOne`
+- `testConfirmedProgressComesOnlyFromWhatTheAuthorityHolds`
+- `testFinalizeAsksThePlaneToCompleteAndAnIncompleteRefusalIsNamed`
+- `testATransferThatOutlivesTheDriversWaitIsAnsweredByTheNextSendWithoutASecondTask`
+- `testTheListenerAdoptionStartsDeliversWhatTheSessionReports`
+- `testACompletionCannotArriveForATaskThisTransportHasNotYetNamed`
+
 ### A cold start finds the payload on the log, and a chunk file is a cache bounded by the in-flight set
 
-All five are deterministic, under `swift test`. ADR-0006 O-12 found the gap: a relaunched
+All six are deterministic, under `swift test`. ADR-0006 O-12 found the gap: a relaunched
 process had the destination and the plan on the log and no way to find the bytes. The
 intent now carries `PayloadRef`, the declaration on disk carries it inside `"intent"`, and
 the ledger's format is 2 (ADR-0007 §8). The second test went red genuinely — a version-1
@@ -617,15 +666,18 @@ written at `send` from the ref and the plan's range, holds exactly that span, is
 when the authority confirms the chunk, and is re-derived by the next `send` if it is ever
 missing (ADR-0007 §7). A payload shorter than the plan is refused rather than written
 short, because a short chunk file would be sent as if it were whole; the fifth test is the
-guard's, and was shown red by removing the guard. The double's own contract for the
-parameter `confirmedProgress` gained is under phase 1's heading, where the rest of that
-contract is.
+guard's, and was shown red by removing the guard. The sixth puts the cache's lifecycle
+against the transport that performs it: three sends write three files, a completion reports
+one of them and all three are still there, and it is the authority's own answer to `/parts`
+that deletes the two it confirms. The double's own contract for the parameter
+`confirmedProgress` gained is under phase 1's heading, where the rest of that contract is.
 
 - `testAColdStartFindsThePayloadOnTheLog`
 - `testAVersionOneHeaderIsRefusedAndItsVersionIsNamed`
 - `testAChunkFileHoldsExactlyTheSpanThePlanNames`
 - `testTheChunkFilesThatExistAtOnceAreBoundedByTheInFlightSet`
 - `testAPayloadShorterThanThePlanIsRefusedRatherThanWrittenShort`
+- `testAChunkFileIsDiscardedWhenTheAuthorityConfirmsTheChunkNotWhenACompletionReports`
 
 ### Phase 5's doubles keep the contracts they stand in for
 
