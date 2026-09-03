@@ -75,6 +75,9 @@ the control plane that issues its URLs, so the transport and the plane it talks 
 phase, not two. The lifecycle half — that the invariant survives a background session and
 real process death — stays phase 5's, where the device harness is.
 
+**Superseded in part by ADR-0007 §1:** the transport is phase 5's, spoken against a
+stand-in; the lifecycle sentence above stands.
+
 ### 2. The driver is a loop over effects, and it holds no state of its own
 
 ```

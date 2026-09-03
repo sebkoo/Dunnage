@@ -45,9 +45,9 @@ exists as code only, and everything else is named so that its absence is legible
      App                                         phase 5   not built
        choose a file, watch it finish
    ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─
-     Transport                                   phase 4b  not built
-       owns the background URLSession, speaks S3 multipart
-       against the presigned URLs the control plane issues
+     Transport                                   phase 5   not built
+       owns the background URLSession, speaks the plane's four routes
+       against a stand-in here, the deployed plane and S3 in 4b
    ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─
    ┌────────────────────────────────────────────────────────────────┐
    │  DunnageDriver                              phase 3   landed   │
@@ -100,8 +100,8 @@ No percentages. A named invariant either exists or it does not.
 | **2. Durable ledger** | The log outlives the process that wrote it: replaying it from disk reproduces state exactly, and a file that is not a log says so rather than deriving one. ADR-0001 O-1 was the open question here; ADR-0004 decides it. | landed — 21 named tests |
 | **3. Driver** | The driver executes Core's effects and records what a transport answered, and concludes nothing of its own: a transfer it stopped waiting for is not a refusal, the attempt tally is not the driver's to keep, and an upload is given up on because Core asked for it. | landed — 22 named tests |
 | **4a. Control plane** | The half of phase 4 a reader can check with no AWS account: a stack that synthesises without one, and a control plane that decides where a caller's bytes may land from the token it verified rather than from anything the caller sent. | landed — 23 named tests, vitest on a second runner |
-| **4b. Transport and data plane** | The bound holds against a real transport: after an interruption, redundant transfer is bounded by the chunks that were in flight and unconfirmed. | not started |
-| **5. App** | The invariant survives real lifecycle events. A simulated process death is not a SIGKILL, and phase 1 does not claim otherwise. | not started |
+| **4b. Transport and data plane** | The same transport, against the real plane and S3: the bucket exists, ADR-0006 §4's four assumptions and ADR-0007's three are checked by a recorded contract run, and O-10's recovery is decided. | not started |
+| **5. App** | The bound survives the process: a transfer outlives the driver that started it, and a relaunched process resumes from the log alone and re-sends nothing the authority confirmed. CI's evidence is a real kill of a process on the simulator; suspension, jetsam and force-quit on a device are the harness's to record, never CI's. | not started |
 
 ## Phase 1: Core — a chunk the authority has confirmed is never re-sent
 

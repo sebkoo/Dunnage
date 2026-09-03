@@ -87,6 +87,7 @@ runner sees the other:
   rule.
 - `parseSession` — Swift, 4b. The only thing that breaks when the rule breaks. It guards
   nothing; it is what the guard is for.
+  *Moved to phase 5 by ADR-0007 §4.*
 
 Each call site carries a comment naming the other when it is written. The rule itself lives
 here, because a comment cannot be the thing a reviewer of the *other* file is expected to
@@ -150,6 +151,8 @@ be:
   a claim about a chunk on the log that nothing made;
 - **never an abandonment** — giving up is Core's conclusion (ADR-0003 §5), reached against a
   budget derived from the log, and a transport does not reach one.
+
+*Moved to phase 5 by ADR-0007 §8.*
 
 ### 4. Four routes, `finalize` in the control plane, and no stubbed `S3Client`
 
@@ -459,6 +462,7 @@ answers turn out to be.
 - **Which `TransportError` a malformed session identity throws.** A new case or
   `.unknownSession` is a change to Core, and the transport that demonstrates the need is 4b's
   (§3).
+  *Moved to phase 5 by ADR-0007 §8.*
 - **No idempotency state, so a lost `POST /uploads` response costs one orphaned operation.**
   Bounded by §7 and not prevented. Preventing it is the demonstrated need that reopens O-2.
 - **No recovery from an operation the authority no longer has.** ADR-0005 O-10 stands. §7
@@ -486,3 +490,5 @@ It is closed in 4b by a `PayloadRef` on `UploadIntent`, opaque to Core the way
 `LedgerFormat.version` from 1 to 2 — the second version ADR-0004 said would need a reader
 that has seen two. Whether that reader is written, or a version-1 log is simply refused under
 ADR-0004 §4, is 4b's to decide with the change.
+
+*Moved to phase 5 by ADR-0007 §8.*
