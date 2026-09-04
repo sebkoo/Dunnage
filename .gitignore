@@ -12,3 +12,4 @@ node_modules/
 swift-test-names.txt
 cloud/vitest-test-names.txt
 cloud/dist/
+App/Local.xcconfig

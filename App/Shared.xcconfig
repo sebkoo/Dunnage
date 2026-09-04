@@ -1,0 +1,31 @@
+// The two signing-related settings the committed project needs, and the optional include
+// the device procedure needs.
+//
+// The team identifier below is empty here and in every committed file (spec §4): CI needs
+// no Apple account, no provisioning profile and no team, and the app-simulator job's guard
+// step greps the committed project and this file for a non-empty value, and for
+// Local.xcconfig itself, and fails on either — a guard, not a negative control, like 4a's
+// context-file check.
+DEVELOPMENT_TEAM =
+CODE_SIGN_STYLE = Automatic
+
+// Ad-hoc for the simulator, which needs no account, no profile and no team — Xcode calls
+// it "Sign to Run Locally". It is pinned, and the simulator job does not pass
+// CODE_SIGNING_ALLOWED=NO, on an observation and not on a mechanism.
+//
+// What was observed, on this Mac, while commit 8's test was written: under XCUITest the
+// app built this way runs its part tasks, and the app built with CODE_SIGNING_ALLOWED=NO
+// fails them at once with NSCocoaErrorDomain 4097, no PUT leaving the process. What the
+// two builds are: this one is codesign-adhoc, `flags=0x2(adhoc)`; the other is
+// linker-signed, `flags=0x20002(adhoc,linker-signed)`. Neither carries an
+// `application-identifier` entitlement, so that entitlement is not the difference and is
+// not named as the cause here.
+//
+// **Which difference causes it is UNVERIFIED** — the failure was seen by one party and
+// not reproduced by a second. ADR-0007 O-16 carries the question.
+CODE_SIGN_IDENTITY[sdk=iphonesimulator*] = -
+
+// An operator's own team, for the device harness, in a file that is gitignored. The include
+// is optional, so a fresh clone builds with the file absent — which is what CI's simulator
+// build proves, and it is the failure `cdk synth` had without `dist/` (spec §4 rider a).
+#include? "Local.xcconfig"

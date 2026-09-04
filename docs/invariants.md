@@ -653,6 +653,47 @@ starts is covered rather than assumed. With all four calls on the actor,
 - `testTheListenerAdoptionStartsDeliversWhatTheSessionReports`
 - `testACompletionCannotArriveForATaskThisTransportHasNotYetNamed`
 
+### A relaunched process derives its state from the log alone, asks before it sends, and re-sends nothing the authority confirmed
+
+Two tests, and they differ in tier, so each is named with its own. The first is **simulator
+evidence** (ADR-0007 §2, tier 2) and is the only test in this repository that launches an
+app. The stand-in is told to hold part 3 `after-store`, so the authority has the bytes and
+only the answer is withheld; the test waits on the stand-in's own report that part 3 was
+received and held, `XCUIApplication.terminate()` ends the process on that report and never
+on a clock, the hold is released, and the app comes up again. What that is evidence for is
+one sentence: process B derives its state from a file process A left, shares no memory with
+A, and asks the authority before it sends — the registry, the waiters, the unclaimed
+completions and the URL the first process minted all went with it. What it is not evidence
+for stays UNVERIFIED and is the harness's: which signal `terminate()` delivers and whether
+the daemon keeps or cancels a killed app's tasks (O-14), whether the resource timeout counts
+while the app is suspended (O-13), and whether the daemon can read the copy the app made
+(O-15) — nor suspension, jetsam, force-quit, radio or power, none of which a simulator run
+reaches. The name says the simulator terminated the process and says nothing more, which
+is ADR-0007 §2's naming rule, and the `last-exit` marker the app writes in
+`applicationWillTerminate` is evidence only when present: nothing reads its absence, in the
+test, the job or this document. Every wait is a bounded count of tries with a name and the
+message it prints on reaching it, and no wait anywhere in the test or the job it runs in is
+an unconditional pause.
+
+**The completion is the occasion; the receipt map is the evidence.** After the phase reads
+`completed` the test reads `GET /_standin/uploads/{id}` once more and asserts that every
+part's count is 1 — part 3's included, the part the first process got confirmed before it
+was killed — with the whole map in the failure message, and that `completes` is 1, a second
+complete being a finalize the driver had no cause to ask for. Without that read the test
+proves only that the relaunched upload finishes: a resume that re-sent a part the authority
+already held would still be green, which is the negative this phase exists to remove. The
+screen's own answer is evidence about the log because of the precondition spec §4.3 states
+and this app keeps — what the screen shows is derived by replaying the ledger, plus the
+transport's in-flight set, and the view holds no upload state of its own.
+
+The second is deterministic (tier 1), in `DunnageAppTests`, with no session and no socket:
+the file the user picks is copied into the app's container and `PayloadRef` names the copy,
+never the picker's security-scoped URL, and the ref is relative to Application Support so it
+survives the container moving (spec §4 rider b, ADR-0007 §8, O-15).
+
+- `testAfterTheSimulatorTerminatedTheAppMidTransferTheRelaunchResendsNothingTheAuthorityConfirmed`
+- `testPayloadRefNamesTheCopyInsideTheContainer`
+
 ### A cold start finds the payload on the log, and a chunk file is a cache bounded by the in-flight set
 
 All six are deterministic, under `swift test`. ADR-0006 O-12 found the gap: a relaunched

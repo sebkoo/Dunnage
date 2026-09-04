@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- The app reaches the stand-in over plain http on 127.0.0.1. Task 0 observed a
+	     process with no plist at all reach loopback on the simulator, which is evidence
+	     about a process and not about an app: ATS is read from an app's Info.plist. The
+	     key is carried regardless (spec §4, §12), so nothing here depends on which half of
+	     that was load-bearing. -->
+	<key>NSAppTransportSecurity</key>
+	<dict>
+		<key>NSAllowsLocalNetworking</key>
+		<true/>
+	</dict>
+</dict>
+</plist>

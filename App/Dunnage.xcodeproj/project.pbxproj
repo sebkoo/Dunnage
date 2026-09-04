@@ -1,0 +1,504 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		720000000000000000000001 /* DunnageCore in Frameworks */ = {isa = PBXBuildFile; productRef = 710000000000000000000001 /* DunnageCore */; };
+		720000000000000000000002 /* DunnageLedger in Frameworks */ = {isa = PBXBuildFile; productRef = 710000000000000000000002 /* DunnageLedger */; };
+		720000000000000000000003 /* DunnageDriver in Frameworks */ = {isa = PBXBuildFile; productRef = 710000000000000000000003 /* DunnageDriver */; };
+		720000000000000000000004 /* DunnageTransport in Frameworks */ = {isa = PBXBuildFile; productRef = 710000000000000000000004 /* DunnageTransport */; };
+		720000000000000000000005 /* DunnageCore in Frameworks */ = {isa = PBXBuildFile; productRef = 710000000000000000000005 /* DunnageCore */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		810000000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 100000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 200000000000000000000001;
+			remoteInfo = Dunnage;
+		};
+		810000000000000000000002 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 100000000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 200000000000000000000001;
+			remoteInfo = Dunnage;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		300000000000000000000001 /* Dunnage.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Dunnage.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		300000000000000000000002 /* DunnageAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DunnageAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		300000000000000000000003 /* DunnageAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DunnageAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		300000000000000000000004 /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Shared.xcconfig; sourceTree = "<group>"; };
+		300000000000000000000005 /* Dunnage-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Dunnage-Info.plist"; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		500000000000000000000001 /* Dunnage */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Dunnage;
+			sourceTree = "<group>";
+		};
+		500000000000000000000002 /* DunnageAppTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = DunnageAppTests;
+			sourceTree = "<group>";
+		};
+		500000000000000000000003 /* DunnageAppUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = DunnageAppUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		410000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				720000000000000000000001 /* DunnageCore in Frameworks */,
+				720000000000000000000002 /* DunnageLedger in Frameworks */,
+				720000000000000000000003 /* DunnageDriver in Frameworks */,
+				720000000000000000000004 /* DunnageTransport in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		410000000000000000000002 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				720000000000000000000005 /* DunnageCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		410000000000000000000003 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		100000000000000000000002 = {
+			isa = PBXGroup;
+			children = (
+				300000000000000000000004 /* Shared.xcconfig */,
+				300000000000000000000005 /* Dunnage-Info.plist */,
+				500000000000000000000001 /* Dunnage */,
+				500000000000000000000002 /* DunnageAppTests */,
+				500000000000000000000003 /* DunnageAppUITests */,
+				100000000000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		100000000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				300000000000000000000001 /* Dunnage.app */,
+				300000000000000000000002 /* DunnageAppTests.xctest */,
+				300000000000000000000003 /* DunnageAppUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		200000000000000000000001 /* Dunnage */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 610000000000000000000002 /* Build configuration list for PBXNativeTarget "Dunnage" */;
+			buildPhases = (
+				400000000000000000000001 /* Sources */,
+				410000000000000000000001 /* Frameworks */,
+				420000000000000000000001 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				500000000000000000000001 /* Dunnage */,
+			);
+			name = Dunnage;
+			packageProductDependencies = (
+				710000000000000000000001 /* DunnageCore */,
+				710000000000000000000002 /* DunnageLedger */,
+				710000000000000000000003 /* DunnageDriver */,
+				710000000000000000000004 /* DunnageTransport */,
+			);
+			productName = Dunnage;
+			productReference = 300000000000000000000001 /* Dunnage.app */;
+			productType = "com.apple.product-type.application";
+		};
+		200000000000000000000002 /* DunnageAppTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 610000000000000000000003 /* Build configuration list for PBXNativeTarget "DunnageAppTests" */;
+			buildPhases = (
+				400000000000000000000002 /* Sources */,
+				410000000000000000000002 /* Frameworks */,
+				420000000000000000000002 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				800000000000000000000001 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				500000000000000000000002 /* DunnageAppTests */,
+			);
+			name = DunnageAppTests;
+			packageProductDependencies = (
+				710000000000000000000005 /* DunnageCore */,
+			);
+			productName = DunnageAppTests;
+			productReference = 300000000000000000000002 /* DunnageAppTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		200000000000000000000003 /* DunnageAppUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 610000000000000000000004 /* Build configuration list for PBXNativeTarget "DunnageAppUITests" */;
+			buildPhases = (
+				400000000000000000000003 /* Sources */,
+				410000000000000000000003 /* Frameworks */,
+				420000000000000000000003 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				800000000000000000000002 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				500000000000000000000003 /* DunnageAppUITests */,
+			);
+			name = DunnageAppUITests;
+			packageProductDependencies = (
+			);
+			productName = DunnageAppUITests;
+			productReference = 300000000000000000000003 /* DunnageAppUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		100000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2660;
+				LastUpgradeCheck = 2660;
+				TargetAttributes = {
+					200000000000000000000002 = {
+						TestTargetID = 200000000000000000000001;
+					};
+					200000000000000000000003 = {
+						TestTargetID = 200000000000000000000001;
+					};
+				};
+			};
+			buildConfigurationList = 610000000000000000000001 /* Build configuration list for PBXProject "Dunnage" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 100000000000000000000002;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				700000000000000000000001 /* XCLocalSwiftPackageReference ".." */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 100000000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				200000000000000000000001 /* Dunnage */,
+				200000000000000000000002 /* DunnageAppTests */,
+				200000000000000000000003 /* DunnageAppUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		420000000000000000000001 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		420000000000000000000002 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		420000000000000000000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		400000000000000000000001 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		400000000000000000000002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		400000000000000000000003 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		800000000000000000000001 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 200000000000000000000001 /* Dunnage */;
+			targetProxy = 810000000000000000000001 /* PBXContainerItemProxy */;
+		};
+		800000000000000000000002 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 200000000000000000000001 /* Dunnage */;
+			targetProxy = 810000000000000000000002 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		600000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 300000000000000000000004 /* Shared.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		600000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			baseConfigurationReference = 300000000000000000000004 /* Shared.xcconfig */;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				SDKROOT = iphoneos;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_VERSION = 6.0;
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
+		600000000000000000000003 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOL_FRAMEWORKS = SwiftUI;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Dunnage-Info.plist";
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.dunnage;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		600000000000000000000004 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_GENERATE_ASSET_SYMBOL_FRAMEWORKS = SwiftUI;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Dunnage-Info.plist";
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = UIInterfaceOrientationPortrait;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.dunnage;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		600000000000000000000005 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.dunnage.unit-tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Dunnage.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Dunnage";
+			};
+			name = Debug;
+		};
+		600000000000000000000006 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.dunnage.unit-tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Dunnage.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Dunnage";
+			};
+			name = Release;
+		};
+		600000000000000000000007 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.dunnage.ui-tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Dunnage;
+			};
+			name = Debug;
+		};
+		600000000000000000000008 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				GENERATE_INFOPLIST_FILE = YES;
+				PRODUCT_BUNDLE_IDENTIFIER = com.example.dunnage.ui-tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				TARGETED_DEVICE_FAMILY = "1,2";
+				TEST_TARGET_NAME = Dunnage;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		610000000000000000000001 /* Build configuration list for PBXProject "Dunnage" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				600000000000000000000001 /* Debug */,
+				600000000000000000000002 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		610000000000000000000002 /* Build configuration list for PBXNativeTarget "Dunnage" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				600000000000000000000003 /* Debug */,
+				600000000000000000000004 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		610000000000000000000003 /* Build configuration list for PBXNativeTarget "DunnageAppTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				600000000000000000000005 /* Debug */,
+				600000000000000000000006 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		610000000000000000000004 /* Build configuration list for PBXNativeTarget "DunnageAppUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				600000000000000000000007 /* Debug */,
+				600000000000000000000008 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		700000000000000000000001 /* XCLocalSwiftPackageReference ".." */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = ..;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		710000000000000000000001 /* DunnageCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = DunnageCore;
+		};
+		710000000000000000000002 /* DunnageLedger */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = DunnageLedger;
+		};
+		710000000000000000000003 /* DunnageDriver */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = DunnageDriver;
+		};
+		710000000000000000000004 /* DunnageTransport */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = DunnageTransport;
+		};
+		710000000000000000000005 /* DunnageCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = DunnageCore;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 100000000000000000000001 /* Project object */;
+}

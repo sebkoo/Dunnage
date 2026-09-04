@@ -8,24 +8,25 @@ on:
 permissions:
   contents: read
 
-# Four jobs rather than four steps in one. build-and-test, cloud-stack and
+# Five jobs rather than five steps in one. build-and-test, cloud-stack, app-simulator and
 # commit-message-hygiene need different machines and different clones — Xcode against a
-# shallow checkout, Node against a second one, awk against the whole history — and they
-# assert unrelated things. A red suite must not hide a fabricated attribution, or the
-# reverse.
+# shallow checkout, Node against a second one, a booted simulator against a third, awk
+# against the whole history — and they assert unrelated things. A red suite must not hide
+# a fabricated attribution, or the reverse, and a red tier 2 must not hide a green
+# `swift test` (spec §10).
 #
 # docs-agree holds the two doc guards. They are a job of their own for a different
 # reason: the name guard reconciles docs/invariants.md against the names the test runners
 # report, and the document names every test there is, whichever runner has it. The guard
 # therefore needs every runner's list at once, and a guard running inside a build job
 # sees only that job's own. Each build job uploads the names it has; docs-agree downloads
-# them and does the comparison. There are two such jobs from this commit on, and the
+# them and does the comparison. There are three such jobs from this commit on, and the
 # comparison is against their union.
 #
-# It runs after both build jobs because it consumes their artifacts, and for no other
-# reason. needs: gates on success, so a failing build skips docs-agree entirely and a doc
-# that disagrees with a suite stays hidden behind the compile error until the build is
-# fixed. Moving the guards out did not decouple them from the builds.
+# It runs after all three because it consumes their artifacts, and for no other reason.
+# needs: gates on success, so a failing build skips docs-agree entirely and a doc that
+# disagrees with a suite stays hidden behind the compile error until the build is fixed.
+# Moving the guards out did not decouple them from the builds.
 jobs:
   build-and-test:
     name: build and test
@@ -140,8 +141,7 @@ jobs:
           exit $failed
 
       # The bundle the simulator job runs. It is built once, here, and downloaded there:
-      # no second `npm ci` on a macOS runner (spec §3 rider a). Nothing downloads it in
-      # this commit — the job that needs it arrives with the app.
+      # no second `npm ci` on a macOS runner (spec §3 rider a).
       - uses: actions/upload-artifact@v7
         with:
           name: standin
@@ -206,11 +206,187 @@ jobs:
           name: vitest-test-names
           path: cloud/vitest-test-names.txt
 
+  app-simulator:
+    name: app simulator
+    # Pinned for the same reason as build-and-test, and macOS because this job boots a
+    # simulator and runs xcodebuild.
+    runs-on: macos-26
+    # The stand-in's bundle is cloud-stack's artifact. needs: gates on success, so a red
+    # cloud stack skips this job rather than running the app against a bundle nobody
+    # checked.
+    needs: [cloud-stack]
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Select the toolchain
+        run: |
+          sudo xcode-select -s /Applications/Xcode_26.6.app
+          xcodebuild -version        # Xcode 26.6 on this image
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: standin
+          path: standin-bundle
+
+      # Its own step, and before anything that has a bound on it. A first boot of a fresh
+      # device takes minutes, and a minute of it spent inside a test's own wait would make
+      # that wait a measurement of the image rather than of the app (spec §10 rider a).
+      # bootstatus -b brings its own bound and prints its own progress.
+      - name: Create and boot the simulator
+        run: |
+          set -u
+          start=$(date +%s)
+          # iPhone 17 on iOS 26.5, the newest runtime the pinned Xcode ships on this image.
+          udid=$(xcrun simctl create dunnage-ci "iPhone 17" "com.apple.CoreSimulator.SimRuntime.iOS-26-5")
+          xcrun simctl boot "$udid"
+          xcrun simctl bootstatus "$udid" -b
+          echo "SIMULATOR_UDID=$udid" >> "$GITHUB_ENV"
+          echo "booted $udid on iOS 26.5 in $(( $(date +%s) - start )) seconds"
+
+      # The port is the operating system's, and the stand-in prints the one it was given.
+      # Read from its own stdout rather than assumed: a fixed port is a port another
+      # process on the runner may already hold, and the failure would be a bind error in
+      # the middle of a test's wait.
+      #
+      # The wait is a bounded count of tries with a message on reaching it, like every
+      # other wait this phase takes. No step in this job pauses for a fixed interval.
+      - name: Start the stand-in
+        shell: bash
+        run: |
+          set -u
+          # Its stdout is read directly, so each try is a wait for a line and not a pause:
+          # `read -t` returns when the line arrives, or when the try's second is up.
+          exec 3< <(node standin-bundle/standin.js --port 0 2>&1)
+          port=""; seen=""
+          for _ in $(seq 1 30); do
+            IFS= read -r -t 1 line <&3 || continue
+            seen="$seen$line"$'\n'
+            case "$line" in
+              "listening on http://127.0.0.1:"*) port=${line##*:}; break ;;
+            esac
+          done
+          [ -n "$port" ] \
+            || { echo "::error::the stand-in did not print a port within 30 s"; printf '%s' "$seen"; exit 1; }
+          echo "STANDIN_PID=$(pgrep -f 'standin-bundle/standin.js' | head -1)" >> "$GITHUB_ENV"
+          echo "STANDIN_BASE_URL=http://127.0.0.1:$port" >> "$GITHUB_ENV"
+          echo "the stand-in is listening on http://127.0.0.1:$port"
+
+      # A guard, not a negative control, like 4a's context-file check: it demonstrates
+      # nothing failing. What it defends is that a fresh clone builds with no operator's
+      # file present — the step below is the proof — and that no committed file carries a
+      # person's or an employer's team identifier. Both checks run and both report; a
+      # broken first one must not hide the second.
+      - name: The committed project names no team and carries no operator's file
+        run: |
+          set -u
+          failed=0
+          teams=$(grep -rn "DEVELOPMENT_TEAM" App/ | grep -v "= *$" || true)
+          [ -z "$teams" ] \
+            || { echo "::error::a committed file sets a team identifier: $teams"; failed=1; }
+          if [ -e App/Local.xcconfig ]; then
+            echo "::error::App/Local.xcconfig is committed — it is an operator's own file and is gitignored"
+            failed=1
+          fi
+          echo "no committed file under App/ sets a team identifier, and App/Local.xcconfig is absent"
+          exit $failed
+
+      # One invocation, both bundles: DunnageAppTests is tier 1 on the simulator and
+      # DunnageAppUITests is tier 2. The stand-in's base URL reaches the UI-test runner
+      # through TEST_RUNNER_ in this step's own environment, which xcodebuild strips before
+      # putting the variable in the runner's; the test forwards it to the app as a launch
+      # argument. Passed as an environment variable and not as a build setting, which is
+      # where the prefix is read from.
+      #
+      # It is signed ad-hoc for the simulator ("Sign to Run Locally", `App/Shared.xcconfig`)
+      # and not built with CODE_SIGNING_ALLOWED=NO, which is what spec §4 asked for. That is
+      # an observation and not a mechanism: under XCUITest the ad-hoc build runs its part
+      # tasks and the CODE_SIGNING_ALLOWED=NO build fails them at once with
+      # NSCocoaErrorDomain 4097, no PUT leaving the process, and the tier-2 test would then
+      # measure nothing. The two builds differ as codesign-adhoc (flags=0x2) from
+      # linker-signed (flags=0x20002); neither carries an `application-identifier`
+      # entitlement, so that is not the difference and is not named as the cause. Which
+      # difference causes it is UNVERIFIED and is ADR-0007 O-16. Ad-hoc needs no Apple
+      # account, no profile and no team, so the claim CI makes about credentials is
+      # unchanged.
+      - name: Test the app on the simulator
+        run: |
+          set -u
+          TEST_RUNNER_DUNNAGE_STANDIN_BASE_URL="$STANDIN_BASE_URL" \
+          xcodebuild test \
+            -project App/Dunnage.xcodeproj -scheme Dunnage \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+            -resultBundlePath "$RUNNER_TEMP/app-tests.xcresult"
+          echo "the app's two bundles passed against the stand-in at $STANDIN_BASE_URL"
+
+      # On failure only, and it is the whole point of writing one: a red on the simulator
+      # is diagnosable from the first run rather than from a re-run nobody can reproduce
+      # (spec §10 rider b).
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: app-test-results
+          path: ${{ runner.temp }}/app-tests.xcresult
+
+      # The third producer, and it reads `enabledTests` only — `vitest list`'s reasoning:
+      # a test a plan skips sits in `disabledTests`, and a producer that read both would
+      # have docs-agree demand the document name a test nothing runs.
+      #
+      # The `test` action must be present or the flag builds, exits 0 and writes nothing —
+      # a silent nothing, which is exactly the shape R-b is about. Hence the assertion that
+      # the file is non-empty before it is uploaded: a broken producer reds here and reds
+      # again in docs-agree, and never contributes an empty list that unions away.
+      #
+      # LC_ALL=C on the sort, for the reason the other two producers pin theirs: sort -u
+      # deduplicates by collation, so an unpinned sort decides which names survive into the
+      # artifact and no re-sorting downstream recovers a name already dropped.
+      - name: Record the test names this runner has
+        run: |
+          set -u
+          xcodebuild test -enumerate-tests \
+            -project App/Dunnage.xcodeproj -scheme Dunnage \
+            -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+            -test-enumeration-style flat -test-enumeration-format json \
+            -test-enumeration-output-path "$RUNNER_TEMP/app-tests.json"
+          jq -r '.values[].enabledTests[].identifier' "$RUNNER_TEMP/app-tests.json" \
+            | awk -F/ '{print $NF}' | grep -oE 'test[A-Z][A-Za-z0-9_]*' | LC_ALL=C sort -u > app-test-names.txt
+          [ -s app-test-names.txt ] \
+            || { echo "::error::the enumeration produced nothing — -enumerate-tests writes a file only when the test action is present"; exit 1; }
+          echo "$(wc -l < app-test-names.txt | tr -d '[:space:]') test names recorded"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: app-test-names
+          path: app-test-names.txt
+
+      # A shell trap cannot span two steps, and the stand-in is started in one and used in
+      # another. This is the same guarantee in the shape the runner has: it runs whatever
+      # the steps above did, it stops the process, and it prints that it did (R-b).
+      #
+      # It shuts down the one udid this run created, by name, and never `simctl shutdown
+      # all`: a runner may hold simulators this job did not boot, and on a developer's Mac
+      # that blanket command stops work whose owner nobody established. Shut down what you
+      # started, and nothing else.
+      - name: Stop the stand-in and shut the simulator down
+        if: ${{ always() }}
+        run: |
+          set -u
+          if [ -n "${STANDIN_PID:-}" ] && kill "$STANDIN_PID" 2>/dev/null; then
+            echo "the stand-in ($STANDIN_PID) was stopped"
+          else
+            echo "the stand-in was not running by the time this step ran"
+          fi
+          if [ -n "${SIMULATOR_UDID:-}" ]; then
+            xcrun simctl shutdown "$SIMULATOR_UDID" || true
+            xcrun simctl delete "$SIMULATOR_UDID" || true
+            echo "the simulator $SIMULATOR_UDID was shut down and deleted"
+          else
+            echo "no simulator was created"
+          fi
+
   docs-agree:
     name: docs agree
     # Pinned for the same reason.
     runs-on: ubuntu-24.04
-    needs: [build-and-test, cloud-stack]
+    needs: [build-and-test, cloud-stack, app-simulator]
     steps:
       - uses: actions/checkout@v7
       - uses: actions/download-artifact@v8
@@ -219,6 +395,9 @@ jobs:
       - uses: actions/download-artifact@v8
         with:
           name: vitest-test-names
+      - uses: actions/download-artifact@v8
+        with:
+          name: app-test-names
 
       # A doc that can drift from the suites is worse than a doc that names no tests at
       # all. Renaming a test fails this job until docs/invariants.md is updated; the
@@ -230,12 +409,12 @@ jobs:
       # either suite appears somewhere in the file, and that nothing shaped like a test
       # name appears in the file which is not one.
       #
-      # One document, two suites, one comparison. docs/invariants.md names every test
+      # One document, three suites, one comparison. docs/invariants.md names every test
       # there is, whichever runner has it, so the side it is compared against is the
       # union of the lists the runners uploaded — not one list per runner. A per-runner
-      # comparison would fail every name the other runner owns.
+      # comparison would fail every name another runner owns.
       #
-      # The sides of the comparison are produced on three different machines — each
+      # The sides of the comparison are produced on four different machines — each
       # suite's names are sorted and uploaded by its own build job's runner, the
       # document's are grepped here — and diff compares lines in order, so one set in two
       # orders is a disagreement. Hence the pinned collation on every sort below. It is
@@ -258,11 +437,11 @@ jobs:
           # be non-empty before it is used, and this is checked per file so one run names
           # every runner that went silent.
           empty=0
-          for f in swift-test-names.txt vitest-test-names.txt; do
+          for f in swift-test-names.txt vitest-test-names.txt app-test-names.txt; do
             [ -s "$f" ] || { echo "::error::$f is empty — a runner reported no test names, and an empty list unions away without trace"; empty=1; }
           done
           [ "$empty" -eq 0 ] || exit 1
-          names=$(cat swift-test-names.txt vitest-test-names.txt | LC_ALL=C sort -u)
+          names=$(cat swift-test-names.txt vitest-test-names.txt app-test-names.txt | LC_ALL=C sort -u)
           diff <(grep -oE 'test[A-Z][A-Za-z0-9_]*' docs/invariants.md | LC_ALL=C sort -u) <(printf '%s\n' "$names") \
             || { echo "::error::docs/invariants.md and the suites disagree — '<' is in the doc only, '>' is in a suite only"; exit 1; }
           echo "$(printf '%s\n' "$names" | wc -l) test names across both suites, docs/invariants.md and the suites agree"
@@ -308,7 +487,7 @@ jobs:
           check 2 6
           check 3 7
           check 4a 6
-          check 5 5
+          check 5 6
           exit $failed
 
   commit-message-hygiene:

@@ -247,6 +247,9 @@ an app target; the app owns exactly what only an app can own. Two riders:
   committed `Shared.xcconfig` — and CI's simulator build with `CODE_SIGNING_ALLOWED=NO` is
   the proof that the project builds with the file absent. A fresh clone must not fail the
   way `cdk synth` did without `dist/`.
+  *Superseded in part by ADR-0007 §2: the job signs ad-hoc for the simulator rather than
+  building with signing off, on an observation recorded there and a cause left open as
+  O-16. The build still needs no account, profile or team, so this rider's proof stands.*
 - **(b) The file the user picks is copied into the app's container, and `PayloadRef` names
   the copy**, never the picker's security-scoped URL. Whether the background daemon can
   read a scoped URL after relaunch, or copies the file itself, is an assumption this

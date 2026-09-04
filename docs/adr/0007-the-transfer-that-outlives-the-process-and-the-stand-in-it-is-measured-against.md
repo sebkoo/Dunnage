@@ -96,6 +96,17 @@ delivers is UNVERIFIED until the phase observes it, and is O-14 below rather tha
 terminated the process. Tier 3 has steps, not tests. No name says SIGKILL, death, or device
 unless it is tier 3, and tier 3 has no test names.
 
+**The simulator job signs the app ad-hoc rather than building with signing off.** The 4a
+spec's §4 said CI would build with `CODE_SIGNING_ALLOWED=NO`; it does not. What was observed
+while the tier-2 test was written: under XCUITest the ad-hoc build runs its part tasks, and
+the `CODE_SIGNING_ALLOWED=NO` build fails them at once with `NSCocoaErrorDomain 4097` and no
+PUT leaves the process — which would leave the tier-2 test measuring nothing. The builds
+differ as codesign-adhoc (`flags=0x2`) from linker-signed (`flags=0x20002`), and neither
+carries an `application-identifier` entitlement, so that entitlement is not the difference
+and no mechanism is asserted here. Which difference causes it is O-16. Ad-hoc signing needs
+no Apple account, no provisioning profile and no team, so what CI claims about credentials
+is unchanged: the guard that fails on a non-empty `DEVELOPMENT_TEAM` still runs.
+
 Row 5 of `README.md` reads, from this commit:
 
 > The bound survives the process: a transfer outlives the driver that started it, and a
@@ -397,6 +408,17 @@ The file the user picks is copied into the app's container, and `PayloadRef` nam
 copy, never the picker's security-scoped URL. UNVERIFIED: whether the background daemon
 can read a scoped URL after relaunch, or copies the file itself. This repository does not
 rely on either answer; the harness's fourth step records what it sees.
+
+### O-16. Why the unsigned build's part tasks fail
+
+An app built with `CODE_SIGNING_ALLOWED=NO` fails every part task at once with
+`NSCocoaErrorDomain 4097`; the same app signed ad-hoc for the simulator does not (§2). The
+two builds differ as linker-signed from codesign-adhoc, and neither carries an
+`application-identifier` entitlement, so the entitlement is not the difference. UNVERIFIED:
+which difference is, and whether the failure reproduces on another machine — it was seen by
+one party while the tier-2 test was written and has not been reproduced by a second. Nothing
+in the phase rests on the answer: the job signs ad-hoc, which needs no account, profile or
+team, and the claim about credentials is unchanged either way.
 
 ## Observed on a device
 
