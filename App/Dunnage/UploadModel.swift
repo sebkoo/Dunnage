@@ -20,6 +20,23 @@ struct LaunchArguments: Sendable {
     var token: String?
     var quietAfter: Duration?
 
+    #if DEBUG
+    /// Which transport the driver is handed, read from `-transport`. `forgetful` installs
+    /// the negative control (spec §7 rider b); anything else, and the absence of the
+    /// argument, leaves the honest transport in place. A release build has no such
+    /// argument, because it has no control to name.
+    var transport: String?
+
+    /// Whether this process was given any launch arguments at all.
+    ///
+    /// A process the system relaunched to deliver its background session's events is given
+    /// none — observed on the simulator, where the whole argument vector is the executable
+    /// path. That is what lets `-transport`'s *absence* in a launch that was given
+    /// arguments mean "no control", and its absence in a launch given none mean "whatever
+    /// the last launch that could say anything said".
+    var wasGivenArguments = false
+    #endif
+
     static func parse(_ arguments: [String]) -> LaunchArguments {
         func value(of name: String) -> String? {
             guard let index = arguments.firstIndex(of: name), index + 1 < arguments.count else {
@@ -27,10 +44,15 @@ struct LaunchArguments: Sendable {
             }
             return arguments[index + 1]
         }
-        return LaunchArguments(
+        var parsed = LaunchArguments(
             standInBaseURL: value(of: "-standin-base-url").flatMap(URL.init(string:)),
             token: value(of: "-token"),
             quietAfter: value(of: "-quiet-after").flatMap(Double.init).map { .seconds($0) })
+        #if DEBUG
+        parsed.transport = value(of: "-transport")
+        parsed.wasGivenArguments = arguments.count > 1
+        #endif
+        return parsed
     }
 }
 
@@ -98,6 +120,24 @@ final class UploadModel: ObservableObject {
     private static let baseURLKey = "dunnage.configured-base-url"
     private static let tokenKey = "dunnage.configured-token"
 
+    #if DEBUG
+    /// Which transport the driver is handed, remembered for exactly the reason above.
+    ///
+    /// The relaunch that matters here is the system's, and it carries no launch arguments,
+    /// so a control installed by `-transport` would be gone from the one process the tier-2
+    /// run reads. It is remembered under a key of its own, like the endpoint and the token,
+    /// and it is configuration of a debug build and never upload state: what the control
+    /// forgets across a relaunch is its own memory of what it reported, and that forgetting
+    /// is the fault being demonstrated.
+    ///
+    /// A launch that was given arguments records what `-transport` said, including that it
+    /// said nothing — so a run that names no control clears one an earlier run installed,
+    /// and the tier-2 test of claim 4 is never handed the control by a run that went before
+    /// it. A launch given no arguments reads what was recorded.
+    private static let transportKey = "dunnage.configured-transport"
+    private let installedTransport: String?
+    #endif
+
     init(container: Container, tasks: URLSessionPartTasks, arguments: LaunchArguments) {
         let remembered = UserDefaults.standard
         self.container = container
@@ -108,6 +148,14 @@ final class UploadModel: ObservableObject {
         self.baseURLText = arguments.standInBaseURL?.absoluteString
             ?? remembered.string(forKey: Self.baseURLKey) ?? ""
         self.lastExit = container.takeLastExit() ?? "none"
+        #if DEBUG
+        if arguments.wasGivenArguments {
+            remembered.set(arguments.transport, forKey: Self.transportKey)
+            self.installedTransport = arguments.transport
+        } else {
+            self.installedTransport = remembered.string(forKey: Self.transportKey)
+        }
+        #endif
     }
 
     /// Adopt whatever the daemon still holds, then pick up every upload the ledger knows
@@ -187,7 +235,18 @@ final class UploadModel: ObservableObject {
         let observed = ObservedEventLog(wrapped: log) { [weak self] in
             Task { @MainActor in await self?.refresh() }
         }
-        let driver = UploadDriver(transport: transport,
+        // The driver is handed whichever transport the arguments name, and the model keeps
+        // its `BackgroundSessionTransport` either way: `adopt()` and `inFlightChunks(of:)`
+        // are the real transport's, so the screen and the registry are untouched. Which
+        // transport that is, and the type that answers when it is not the honest one, is
+        // decided in `App/Dunnage/NegativeControl/` — a `#if DEBUG` directory, so nothing
+        // here names a control a release build does not have.
+        #if DEBUG
+        let driven = transportForTheDriver(named: installedTransport, wrapping: transport)
+        #else
+        let driven: any UploadTransport = transport
+        #endif
+        let driver = UploadDriver(transport: driven,
                                   log: observed,
                                   clock: SystemClock(),
                                   quietAfter: arguments.quietAfter ?? .seconds(600))

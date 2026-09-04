@@ -12,6 +12,9 @@
 		720000000000000000000003 /* DunnageDriver in Frameworks */ = {isa = PBXBuildFile; productRef = 710000000000000000000003 /* DunnageDriver */; };
 		720000000000000000000004 /* DunnageTransport in Frameworks */ = {isa = PBXBuildFile; productRef = 710000000000000000000004 /* DunnageTransport */; };
 		720000000000000000000005 /* DunnageCore in Frameworks */ = {isa = PBXBuildFile; productRef = 710000000000000000000005 /* DunnageCore */; };
+		720000000000000000000006 /* DunnageTransport in Frameworks */ = {isa = PBXBuildFile; productRef = 710000000000000000000006 /* DunnageTransport */; };
+		720000000000000000000007 /* ScriptedWire.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000006 /* ScriptedWire.swift */; };
+		720000000000000000000008 /* CannedPlane.swift in Sources */ = {isa = PBXBuildFile; fileRef = 300000000000000000000007 /* CannedPlane.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -37,6 +40,8 @@
 		300000000000000000000003 /* DunnageAppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = DunnageAppUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		300000000000000000000004 /* Shared.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Shared.xcconfig; sourceTree = "<group>"; };
 		300000000000000000000005 /* Dunnage-Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = "Dunnage-Info.plist"; sourceTree = "<group>"; };
+		300000000000000000000006 /* ScriptedWire.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ScriptedWire.swift; path = ../Tests/DunnageTests/ScriptedWire.swift; sourceTree = "<group>"; };
+		300000000000000000000007 /* CannedPlane.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = CannedPlane.swift; path = ../Tests/DunnageTests/CannedPlane.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -74,6 +79,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				720000000000000000000005 /* DunnageCore in Frameworks */,
+				720000000000000000000006 /* DunnageTransport in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -95,8 +101,18 @@
 				500000000000000000000001 /* Dunnage */,
 				500000000000000000000002 /* DunnageAppTests */,
 				500000000000000000000003 /* DunnageAppUITests */,
+				100000000000000000000004 /* Shared doubles */,
 				100000000000000000000003 /* Products */,
 			);
+			sourceTree = "<group>";
+		};
+		100000000000000000000004 /* Shared doubles */ = {
+			isa = PBXGroup;
+			children = (
+				300000000000000000000006 /* ScriptedWire.swift */,
+				300000000000000000000007 /* CannedPlane.swift */,
+			);
+			name = "Shared doubles";
 			sourceTree = "<group>";
 		};
 		100000000000000000000003 /* Products */ = {
@@ -157,6 +173,7 @@
 			name = DunnageAppTests;
 			packageProductDependencies = (
 				710000000000000000000005 /* DunnageCore */,
+				710000000000000000000006 /* DunnageTransport */,
 			);
 			productName = DunnageAppTests;
 			productReference = 300000000000000000000002 /* DunnageAppTests.xctest */;
@@ -263,6 +280,8 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				720000000000000000000007 /* ScriptedWire.swift in Sources */,
+				720000000000000000000008 /* CannedPlane.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -497,6 +516,10 @@
 		710000000000000000000005 /* DunnageCore */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = DunnageCore;
+		};
+		710000000000000000000006 /* DunnageTransport */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = DunnageTransport;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

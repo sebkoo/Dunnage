@@ -192,3 +192,4 @@ for what each tier does and does not establish. The named tests are in
 - A relaunched process derives its state from the log alone, asks before it sends, and re-sends nothing the authority confirmed
 - A cold start finds the payload on the log, and a chunk file is a cache bounded by the in-flight set
 - Phase 5's doubles keep the contracts they stand in for
+- The failure mode a transport that trusts its own reports reintroduces, kept working on purpose

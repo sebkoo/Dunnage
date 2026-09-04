@@ -290,6 +290,55 @@ jobs:
           echo "no committed file under App/ sets a team identifier, and App/Local.xcconfig is absent"
           exit $failed
 
+      # The negative control is the app's alone, and a release build must not carry it.
+      # Two checks, both of which run and both of which report: a broken first one must
+      # not hide the second, the way 4a's control check is written.
+      #
+      # The first reads a Release build's symbols, grepped case-insensitively for the
+      # control's name. `#if DEBUG` is a compilation condition and not a promise, and this
+      # is what turns it into one — provided the read is shown to be able to see one.
+      #
+      # It reads every symbol and not only the exported ones. A Swift declaration with no
+      # access modifier links internal, so `nm -gU` reads zero for `UploadModel` too, on a
+      # binary that plainly contains it — an arm that answers zero whether or not the thing
+      # is there. And it must be shown to read a positive, or a zero proves nothing, so the
+      # same command is run for a type this app cannot be built without: if that reads zero
+      # the instrument is inert and the step fails saying so, rather than passing on a
+      # number it could not have produced. Measured while this step was written: on the
+      # Release binary `nm` reads 0 for the control and 115 for `UploadModel`, and on a
+      # Debug build's `Dunnage.debug.dylib` — where a Debug build keeps the app's code —
+      # it reads 72 for the control. The instrument can see one; here it does not.
+      #
+      # The second reads the sources, excluding by path prefix and not by content: a line
+      # that merely mentioned `NegativeControl` would otherwise exclude itself, which is
+      # how the wrap site's own comment slipped through a content filter. `UploadModel`
+      # names the directory, never the type, so a wrap site that started naming it would
+      # be caught here rather than only in the symbol table.
+      - name: No release path carries the negative control
+        run: |
+          set -u
+          failed=0
+          xcodebuild build \
+            -project App/Dunnage.xcodeproj -scheme Dunnage -configuration Release \
+            -destination "generic/platform=iOS Simulator" \
+            -derivedDataPath "$RUNNER_TEMP/release" > "$RUNNER_TEMP/release-build.log" 2>&1 \
+            || { echo "::error::the Release build failed"; tail -20 "$RUNNER_TEMP/release-build.log"; exit 1; }
+          binary="$RUNNER_TEMP/release/Build/Products/Release-iphonesimulator/Dunnage.app/Dunnage"
+          [ -f "$binary" ] \
+            || { echo "::error::the Release build produced no binary at $binary"; exit 1; }
+          symbols=$(nm "$binary" | grep -ci forgetful || true)
+          sensitivity=$(nm "$binary" | grep -ci uploadmodel || true)
+          [ "$sensitivity" -gt 0 ] \
+            || { echo "::error::the symbol read is inert — nm found no UploadModel either, so a zero for the control proves nothing"; failed=1; }
+          [ "$symbols" -eq 0 ] \
+            || { echo "::error::the Release binary carries $symbols symbol(s) naming the negative control"; failed=1; }
+          named=$(grep -rn "ForgetfulTransport" App/ \
+            | grep -v "^App/Dunnage/NegativeControl/\|^App/DunnageAppTests/\|^App/DunnageAppUITests/" || true)
+          [ -z "$named" ] \
+            || { echo "::error::the negative control is named outside App/Dunnage/NegativeControl/ and the test bundles: $named"; failed=1; }
+          echo "the Release binary carries $symbols symbols naming the control against $sensitivity naming UploadModel, and no source outside NegativeControl/ and the test bundles names it"
+          exit $failed
+
       # One invocation, both bundles: DunnageAppTests is tier 1 on the simulator and
       # DunnageAppUITests is tier 2. The stand-in's base URL reaches the UI-test runner
       # through TEST_RUNNER_ in this step's own environment, which xcodebuild strips before
@@ -487,7 +536,7 @@ jobs:
           check 2 6
           check 3 7
           check 4a 6
-          check 5 6
+          check 5 7
           exit $failed
 
   commit-message-hygiene:

@@ -420,6 +420,31 @@ one party while the tier-2 test was written and has not been reproduced by a sec
 in the phase rests on the answer: the job signs ad-hoc, which needs no account, profile or
 team, and the claim about credentials is unchanged either way.
 
+### O-17. A tier-1 wait that counts yields and not progress
+
+`settled(within:)` — the helper the transport's tier-1 tests wait with — loops
+`await Task.yield()` a fixed number of times and fails when the count runs out. The count is
+not a measure of progress: under CPU starvation a poller can spend its whole budget before
+the task it is waiting for is ever scheduled, so a test that is deterministic on an idle
+machine is not deterministic on a busy one.
+
+Observed: `TransportSendTests` at bound `10_000`, five failures in
+`testASendMintsItsURLAtSendAndCreatesOneTaskNamedForTheChunk` with an `xcodebuild` build and
+a simulator boot running beside it; 114 of 114 on every unloaded run, with the package
+byte-identical to HEAD. It is not a regression in the code under test — it is the wait.
+
+UNVERIFIED: whether this has ever fired in CI, where the Swift job runs alone on its own
+runner, and therefore whether the exposure is the test's or the machine's.
+
+Raising the bound is refused: "deterministic only" is not "deterministic if you wait long
+enough", and a larger number makes a test slower to fail without making it more correct.
+**The commit after this one closes it by removing the poll**: the double publishes the
+event — a continuation or `AsyncStream` the wire fulfils when it starts a task, and the
+transport when it registers a waiter — and the test awaits that. No clock, no bound, no
+yield count; a genuine failure then hangs until XCTest's own per-test timeout, which is the
+runner's backstop and not a wait the test performs. An `XCTWaiter` timeout is refused for
+the same reason as a larger bound: it is a wall-clock wait wearing a different hat.
+
 ## Observed on a device
 
 Nothing yet. `docs/device-harness.md` says what is recorded here and how.

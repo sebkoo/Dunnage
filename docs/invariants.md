@@ -764,3 +764,55 @@ is tested here as the stand-in's own, and each is 4b's contract run to settle.
 - `testAnUploadIdNotUnderTheKeyIsRefused`
 - `testACompleteOverPartsItDoesNotHoldIsRefused`
 - `testTheStandInRefusesWhatThePlaneRefusesWithTheSameAnswer`
+
+### The failure mode a transport that trusts its own reports reintroduces, kept working on purpose
+
+The fault is the one ADR-0001 §3 exists to remove: a transport that reads its own report as
+a statement by the authority. `ForgetfulTransport` is the honest transport with one method
+different — `openSession`, `send` and `finalize` forward to it verbatim, and
+`confirmedProgress` answers out of the chunks a completion reported to this process, never
+asking `GET /uploads/{ref}/parts`. Nothing else about it is wrong: it mints its URLs at
+`send`, adopts the daemon's tasks, cancels a task it did not name, and refuses what the
+plane refuses. It lives in the app target under `#if DEBUG` behind `-transport forgetful`,
+never in `DunnageTransport`, and no release path names it.
+
+Phase 1's control is bytes re-sent that were confirmed. Phase 2's is bytes skipped that
+were not. Phase 3's is an upload abandoned that nothing was wrong with. Phase 4a's is two
+callers on one object. This one re-sends a part the authority already holds — and it is
+phase 1's failure again, arriving where the process boundary is, because nothing this
+control remembers survives the process that remembered it.
+
+**Its memory is one set for the process and not one set per session, deliberately.** Keying
+it by session would keep two uploads in one process from contaminating each other, and a
+control more careful than the bug it stands for understates the bug: the fault is "a report
+is read as the authority's word", and a transport that made that mistake would not also be
+scrupulous about which operation it made it for. The answer still comes back bounded by a
+plan, because `ConfirmedProgress.confirmedChunks(in:)` reads a set-shaped answer against
+the plan it was asked about — an intersection Core performs, and never a care the control
+takes.
+
+The three tests are contract, control and contrast, in that order, and the order is an
+argument: the control has to be a fair instrument before it is a demonstration, and only
+then is the difference attributable to the one thing that differs. The contract test is
+tier 1, in the app's unit-test bundle, on the scripted wire and a canned plane: both
+transports are driven through one script and every observable answer is compared — the
+identity `openSession` composed, the outcome each completion became, one task per chunk,
+the refusal an expired URL produced, what the plane was asked, and what `finalize` returned
+and refused — with every differing row named rather than the first. The control is tier 2,
+in the UI-test bundle: the simulator run of claim 4's own sequence with `-transport
+forgetful` added and nothing else changed, after which the stand-in's receipt map reads 2
+for the parts the authority already held. That is the one place in this repository where a
+re-send is expected; the test under claim 4 asserts every count is 1, and this one asserts
+2 where the authority had already answered. The contrast is tier 1 again: two fresh
+instances over one wire whose authority holds parts 1 and 2, where the honest transport
+answers `.chunks({1, 2})` and the control answers `.chunks({})` — same wire, same
+authority, same question, and the difference is the source of the answer and not the
+diligence around it.
+
+It is never "fixed". If the forgetful transport stops re-sending a part the authority
+already holds, the control has been broken and `BackgroundSessionTransport` has nothing
+left to be measured against.
+
+- `testTheForgetfulTransportKeepsTheContractItIsMeasuredAgainst`
+- `testWithATransportThatTrustsItsOwnReportsTheRelaunchResendsWhatTheAuthorityHolds`
+- `testAfterARelaunchShapedResetTheHonestTransportAnswersFromWhatTheAuthorityHolds`
