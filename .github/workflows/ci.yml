@@ -116,6 +116,37 @@ jobs:
       # bundle is --packages=external, so aws-cdk-lib is required from node_modules and its
       # vendored custom-resource handlers still resolve relative to their own __dirname.
       - run: npm run build
+
+      # The stand-in is a test double, and `Code.fromAsset('dist/handlers')` uploads a
+      # directory. A bundle emitted into that directory would be a test double inside a
+      # production Lambda asset, and nothing else in this repository would notice: the
+      # asset is staged by name, not by contents. So the emitted set is named here, and
+      # the synthesised template is read for any mention of the stand-in at all. Both
+      # checks run and both report — a broken first one must not hide the second.
+      - name: The stand-in is beside the handler asset, never inside it and never in the stack
+        run: |
+          set -u
+          failed=0
+          bundles=$(ls dist/handlers | LC_ALL=C sort | tr '\n' ' ')
+          [ "$bundles" = "complete.js create.js parts.js urls.js " ] \
+            || { echo "::error::dist/handlers holds '$bundles' — Code.fromAsset uploads that directory, and only the four handler bundles belong in it"; failed=1; }
+          test -f dist/standin.js \
+            || { echo "::error::dist/standin.js was not built — the stand-in's bundle is the artifact the simulator job runs"; failed=1; }
+          mentions=$(npx cdk synth --no-lookups 2>/dev/null | grep -ci standin || true)
+          [ "$mentions" -eq 0 ] \
+            || { echo "::error::the synthesised template mentions the stand-in $mentions times — a test double reached the deployed stack"; failed=1; }
+          echo "dist/handlers holds exactly: $bundles"
+          echo "dist/standin.js exists beside it, $(wc -c < dist/standin.js | tr -d '[:space:]') bytes, and the synthesised template mentions the stand-in $mentions times"
+          exit $failed
+
+      # The bundle the simulator job runs. It is built once, here, and downloaded there:
+      # no second `npm ci` on a macOS runner (spec §3 rider a). Nothing downloads it in
+      # this commit — the job that needs it arrives with the app.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: standin
+          path: cloud/dist/standin.js
+
       - run: npm test
 
       # The two steps below are claim 1's, and each defends a property that fails quietly.

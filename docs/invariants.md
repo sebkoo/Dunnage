@@ -681,15 +681,45 @@ that deletes the two it confirms. The double's own contract for the parameter
 
 ### Phase 5's doubles keep the contracts they stand in for
 
-All three are deterministic, under `swift test`. The scripted wire stands in for
-`PartTaskSession`, this repository's contract for the daemon and the wire together, and
-never for `URLSession`: a double of a vendor's product runs a guess against itself
-(ADR-0007 §9). It holds exactly the tasks seeded or created and forgets a cancelled one,
-delivers each completion once in the order the test gave them, and counts a receipt per
-task created whose description names a part and none for one that does not parse. This
-claim grows once, in commit 7, when the stand-in's own tests and its parity diff against
-the plane arrive with the stand-in.
+All ten are deterministic: three under `swift test`, and seven under vitest against a
+server the suite starts in-process on a port the operating system assigns. The scripted
+wire stands in for `PartTaskSession`, this repository's contract for the daemon and the
+wire together, and never for `URLSession`: a double of a vendor's product runs a guess
+against itself (ADR-0007 §9). It holds exactly the tasks seeded or created and forgets a
+cancelled one, delivers each completion once in the order the test gave them, and counts
+a receipt per task created whose description names a part and none for one that does not
+parse. The stand-in is the same kind of double, of the four routes ADR-0006 §4 wrote
+down and a PUT per part, and never of S3. Its counter counts receipts, one per PUT
+stored for a `(uploadId, part)` and including one that replaced bytes already held —
+accepted rather than refused, which is what ADR-0001 wrote the invariant's weaker claim
+against — so a part sent again is a number a test reads and not an inference from
+timing. `hold` withholds an answer in two modes: `after-store` stores the bytes first,
+so `/parts` reports the part while its answer is still outstanding, and `before-store`
+stores nothing until release and is the device harness's alone (spec §3.3), never a CI
+assertion. "Withheld" is asserted as an ordering and not a duration — the PUT's promise
+has not settled at a point where a `/parts` round trip has already been answered — and
+that shows the answer had not arrived by that point, not that it never would have. The
+parity diff asks the four handlers and the four stand-in routes the twelve refusals both
+owe, through one instrument, and compares the status and the named `error` and nothing
+else: the ids, URLs, part lists and etags differ by construction, so a diff over them
+would compare fixtures rather than behaviour. The table holds refusals only, and that is
+a property rather than a convenience — every row is decided before any `S3Client` is
+constructed, which is exactly what lets the plane's side answer on a machine with no
+credential. None of ADR-0007 §9's three assumptions is in it, each for a reason of its
+own: no handler serves a PUT, so the 403 has nothing on the plane's side to be diffed
+against; the plane renders no 404 for an uploadId not under the key, `NoSuchUpload`
+escaping `parts.ts` and `complete.ts` unhandled, and diffing a 404 against an unhandled
+error would assert the plane behaves as it does not; and the plane cannot refuse an
+incomplete complete at all, not knowing the plan's N. Each is the stand-in's own, each
+is tested here as the stand-in's own, and each is 4b's contract run to settle.
 
 - `testTheScriptedWireHoldsExactlyTheTasksCreatedOrSeededAndForgetsACancelledOne`
 - `testTheScriptedWireDeliversEachCompletionOnceInTheOrderTheTestGaveThem`
 - `testTheScriptedWireCountsAReceiptPerTaskCreatedAndNoneForAnUnparseableOne`
+- `testAPartReceivedIsCountedEvenWhenItReplacesOneAlreadyHeld`
+- `testAHoldAfterStoreIsHeldByPartsAndWithholdsTheAnswer`
+- `testAHoldBeforeStoreWithholdsAndHoldsNothingUntilRelease`
+- `testAUrlIsRefusedForAnotherPartAndAfterItsExpiry`
+- `testAnUploadIdNotUnderTheKeyIsRefused`
+- `testACompleteOverPartsItDoesNotHoldIsRefused`
+- `testTheStandInRefusesWhatThePlaneRefusesWithTheSameAnswer`

@@ -20,7 +20,7 @@ import { objectKey, validateRef, verifiedSub } from './identity'
 // in `Sources/DunnageTransport/`, the background session's `timeoutIntervalForResource`: that
 // timeout is a ceiling over this expiry, so lowering this number without lowering that one
 // leaves a ceiling that bounds nothing.
-const EXPIRES_IN_SECONDS = 900
+export const EXPIRES_IN_SECONDS = 900
 
 // S3's part numbers run 1 through 10000, so an unbounded count is a request to sign an
 // arbitrary number of URLs.
