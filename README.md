@@ -9,11 +9,13 @@ Durable, resumable background uploads for iOS.
 
 A successful HTTP request is not the same thing as a durable upload.
 
-**Status:** Core, the durable ledger, the driver and the control plane — intent model,
-total transition table, append-only event log with a file-backed implementation, the
-transport boundary with an in-memory double, the driver that executes Core's effects
-behind an injected clock, and a CDK stack with four handlers that synthesise with no
-cloud credentials. Nothing is deployed. No real transport, no app.
+**Status:** Core, the durable ledger, the driver, the control plane, the transport and
+the app — intent model, total transition table, append-only event log with a
+file-backed implementation, the transport boundary with an in-memory double, the driver
+that executes Core's effects behind an injected clock, a CDK stack with four handlers
+that synthesise with no cloud credentials, and a transport that owns a background
+URLSession and speaks the plane's four routes against a stand-in. Nothing is deployed,
+and no byte has reached S3.
 
 Three mechanisms this library keeps apart, because none of them implies the others:
 
@@ -36,16 +38,17 @@ decisions are in [docs/adr/](docs/adr/).
 
 ## Bird's-eye view
 
-Where this package sits in the whole system. This package exists, the control plane
-exists as code only, and everything else is named so that its absence is legible.
+Where this package sits in the whole system. This package, the transport and the app
+exist; the control plane exists as code only; and the data plane is named so that its
+absence is legible.
 
 ```
                             iOS device
    ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─
-     App                                         phase 5   not built
+     App                                         phase 5   landed
        choose a file, watch it finish
    ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─
-     Transport                                   phase 5   not built
+     Transport                                   phase 5   landed
        owns the background URLSession, speaks the plane's four routes
        against a stand-in here, the deployed plane and S3 in 4b
    ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─
@@ -96,12 +99,12 @@ No percentages. A named invariant either exists or it does not.
 
 | Phase | What it proves | Status |
 |---|---|---|
-| **1. Core** | A chunk the transport authority has confirmed is never re-sent, under an identity and payload contract Core does not interpret, and no two ways of not being confirmed are treated as one. | landed — 39 named tests |
+| **1. Core** | A chunk the transport authority has confirmed is never re-sent, under an identity and payload contract Core does not interpret, and no two ways of not being confirmed are treated as one. | landed — 40 named tests |
 | **2. Durable ledger** | The log outlives the process that wrote it: replaying it from disk reproduces state exactly, and a file that is not a log says so rather than deriving one. ADR-0001 O-1 was the open question here; ADR-0004 decides it. | landed — 21 named tests |
 | **3. Driver** | The driver executes Core's effects and records what a transport answered, and concludes nothing of its own: a transfer it stopped waiting for is not a refusal, the attempt tally is not the driver's to keep, and an upload is given up on because Core asked for it. | landed — 22 named tests |
 | **4a. Control plane** | The half of phase 4 a reader can check with no AWS account: a stack that synthesises without one, and a control plane that decides where a caller's bytes may land from the token it verified rather than from anything the caller sent. | landed — 23 named tests, vitest on a second runner |
 | **4b. Transport and data plane** | The same transport, against the real plane and S3: the bucket exists, ADR-0006 §4's four assumptions and ADR-0007's three are checked by a recorded contract run, and O-10's recovery is decided. | not started |
-| **5. App** | The bound survives the process: a transfer outlives the driver that started it, and a relaunched process resumes from the log alone and re-sends nothing the authority confirmed. CI's evidence is a real kill of a process on the simulator; suspension, jetsam and force-quit on a device are the harness's to record, never CI's. | not started |
+| **5. App** | The bound survives the process: a transfer outlives the driver that started it, and a relaunched process resumes from the log alone and re-sends nothing the authority confirmed. CI's evidence is a real kill of a process on the simulator; suspension, jetsam and force-quit on a device are the harness's to record, never CI's. | landed — 46 named tests, two app bundles on a simulator |
 
 ## Phase 1: Core — a chunk the authority has confirmed is never re-sent
 
