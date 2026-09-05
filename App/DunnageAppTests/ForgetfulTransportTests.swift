@@ -11,12 +11,14 @@ import DunnageCore
 /// wire's next start, the transport's count of the waiters it has stored, the send's own
 /// `Task` — and nothing anywhere in this file counts yields or pauses for an interval.
 ///
-/// **Contract, control, contrast, in that order** (spec §7 rider a, 3a2cbbe's shape). The
-/// contract test is first because the order is an argument: the control has to be a fair
-/// instrument before it is a demonstration, and only then is the difference the third test
-/// shows attributable to `confirmedProgress`'s source rather than to some second fault. The
-/// control itself — the counter reading 2 after a kill and a relaunch — is tier 2, in
-/// `ControlUITests`.
+/// **Contract, control, contrast, in that order** (spec §7 rider a), which is the shape
+/// 4a's own control takes: `cloud/test/client-trusted-key.ts`, exercised by
+/// `testTheClientTrustedKeyHandlerKeepsTheContractItIsMeasuredAgainst`, which lives in
+/// `cloud/test/negative-control.test.ts`. The contract test is first because the order is
+/// an argument: the control has to be a fair instrument before it is a demonstration, and
+/// only then is the difference the third test shows attributable to
+/// `confirmedProgress`'s source rather than to some second fault. The control itself —
+/// the counter reading 2 after a kill and a relaunch — is tier 2, in `ControlUITests`.
 final class ForgetfulTransportTests: XCTestCase {
 
     private var root: URL!
