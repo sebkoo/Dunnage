@@ -15,6 +15,10 @@ import DunnageCore
 /// the double's lifetime, and the test drives it through `complete(_:with:)`. A receipt
 /// is counted per `createTask` whose description names a part; one that does not parse
 /// names nothing, so it counts nothing.
+///
+/// `nextStart()` hands out the tasks this wire was told to start, oldest first and one
+/// caller each. It is what a test waits on for a send that is running concurrently, and
+/// it is a queue rather than an edge for the reason its own comment gives.
 actor ScriptedWire: PartTaskSession {
 
     /// Every call the transport made, in order.
@@ -33,6 +37,13 @@ actor ScriptedWire: PartTaskSession {
     private var nextID = 1
     private var receipts: [Int: Int] = [:]
     private var completionOnStart: PartTaskCompletion?
+
+    /// The starts nobody has taken yet, oldest first, and the callers waiting for one.
+    /// **A queue and not an edge**: a start made while nobody was asking is kept and
+    /// handed to the next caller, because a signal that could be missed if a test asked a
+    /// moment late is the race a poll has, in a new shape.
+    private var starts: [PartTaskID] = []
+    private var waitingForStart: [CheckedContinuation<PartTaskID, Never>] = []
 
     init() {
         (completions, continuation) = AsyncStream<TaskCompletion>.makeStream()
@@ -57,6 +68,16 @@ actor ScriptedWire: PartTaskSession {
         completionOnStart = completion
     }
 
+    /// The oldest start no caller has taken, or a suspension until one is made.
+    ///
+    /// Every start is handed to exactly one caller, in the order the transport made them:
+    /// the queue is what a test waits on instead of counting yields, and losing one would
+    /// leave a test waiting for an event that had already happened.
+    func nextStart() async -> PartTaskID {
+        if !starts.isEmpty { return starts.removeFirst() }
+        return await withCheckedContinuation { waitingForStart.append($0) }
+    }
+
     /// How many tasks were created whose description names this part.
     func puts(part: Int) -> Int {
         receipts[part] ?? 0
@@ -79,6 +100,11 @@ actor ScriptedWire: PartTaskSession {
 
     func start(_ id: PartTaskID) async {
         journal.append(.start(id))
+        if waitingForStart.isEmpty {
+            starts.append(id)
+        } else {
+            waitingForStart.removeFirst().resume(returning: id)
+        }
         if let completion = completionOnStart {
             continuation.yield(TaskCompletion(id: id, completion: completion))
         }

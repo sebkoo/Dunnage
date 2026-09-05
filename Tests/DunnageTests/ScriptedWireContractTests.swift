@@ -67,4 +67,29 @@ final class ScriptedWireContractTests: XCTestCase {
         XCTAssertEqual(journal.filter { $0 == .createTask(description: "garbage") }.count, 1,
                        "the unparseable task was still created; it counts no receipt")
     }
+
+    /// The starts are a queue and not an edge: a start made before any caller asked is
+    /// still handed over, they arrive in the order they were made, and no start reaches
+    /// two callers.
+    ///
+    /// The three starts here are all made before anybody asks, which is the case an edge
+    /// loses: a signal that could be missed if a test asked a moment late would be the
+    /// race the poll this replaced had, in a new shape. The last pair is the other
+    /// direction — a caller that asked before the start it is handed was made.
+    func testTheScriptedWireHandsOutEveryStartOnceInTheOrderItWasMade() async {
+        let wire = ScriptedWire()
+        await wire.start(PartTaskID(7))
+        await wire.start(PartTaskID(8))
+        let first = await wire.nextStart()
+        await wire.start(PartTaskID(9))
+        let second = await wire.nextStart()
+        XCTAssertEqual([first, second], [PartTaskID(7), PartTaskID(8)],
+                       "the starts were not handed out oldest first, once each")
+
+        let waiting = Task { await wire.nextStart() }
+        await wire.start(PartTaskID(10))
+        let third = await waiting.value
+        XCTAssertEqual(third, PartTaskID(9),
+                       "the caller was not handed the start that was already waiting for one")
+    }
 }

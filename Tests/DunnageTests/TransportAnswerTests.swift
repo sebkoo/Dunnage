@@ -10,8 +10,9 @@ import DunnageCore
 /// was awaiting is held in memory for the first send that asks and never reaches the log.
 /// ADR-0007 §7: a chunk file is deleted when `/parts` confirms the chunk, not when a
 /// completion reports it. Deterministic, on the scripted wire and a canned plane: a test
-/// that waits for a send to reach or leave its await yields a bounded number of times and
-/// fails naming the bound; nothing here waits on a clock.
+/// that waits for a send to reach its await awaits the transport's own count of the
+/// waiters it has stored, and one that waits for a send to leave it awaits the send's own
+/// `Task`; nothing here waits on a clock and nothing counts yields.
 final class TransportAnswerTests: XCTestCase {
 
     /// The requests the plane was asked and the answers it gives back, local to the test
@@ -98,22 +99,8 @@ final class TransportAnswerTests: XCTestCase {
         return Fixture(transport: transport, wire: wire, chunkFiles: chunkFiles, intent: intent)
     }
 
-    /// Yield until `condition` holds, at most `bound` times; past the bound the test fails
-    /// naming it. No clock: a yield is the only way a concurrent send moves.
-    private func settled(within bound: Int, _ condition: () async -> Bool,
-                         file: StaticString = #filePath, line: UInt = #line) async {
-        var yields = 0
-        var holds = await condition()
-        while !holds, yields < bound {
-            await Task.yield()
-            yields += 1
-            holds = await condition()
-        }
-        XCTAssertTrue(holds, "not settled within \(bound) yields", file: file, line: line)
-    }
-
-    /// Run one send as a `Task` and record how it ended, so a test can wait for it with
-    /// `settled` and then read what it returned.
+    /// Run one send as a `Task` and record how it ended, so a test can await the `Task`
+    /// and then read what it returned.
     private func start(_ ordinal: Int, of f: Fixture, into sends: Sends) -> Task<Void, Never> {
         Task {
             let chunk = ChunkID(ordinal)
@@ -134,13 +121,16 @@ final class TransportAnswerTests: XCTestCase {
         await send.value
     }
 
-    /// Start a send for `ordinal` and wait until it is awaiting its task, so the task is
-    /// registered under its description and the id the wire minted for it is known.
-    private func awaiting(_ ordinal: Int, of f: Fixture, into sends: Sends) async -> Task<Void, Never> {
+    /// Start a send for `ordinal` and wait until it has registered a waiter on its task,
+    /// so the task exists under its description and the id the wire minted for it is known.
+    ///
+    /// `registration` is cumulative — the transport counts every waiter it has stored for
+    /// the chunk, never the live count — so a second send for a chunk one send has already
+    /// waited on asks for the second.
+    private func awaiting(_ ordinal: Int, registration: Int = 1,
+                          of f: Fixture, into sends: Sends) async -> Task<Void, Never> {
         let send = start(ordinal, of: f, into: sends)
-        await settled(within: 10_000) {
-            await f.transport.awaiting(ChunkID(ordinal), of: f.intent.upload) == 1
-        }
+        await f.transport.whenRegistered(registration, on: ChunkID(ordinal), of: f.intent.upload)
         return send
     }
 
@@ -161,8 +151,7 @@ final class TransportAnswerTests: XCTestCase {
         await f.transport.deliver(TaskCompletion(id: PartTaskID(1), completion: .answered(status: 200)))
         await f.transport.deliver(TaskCompletion(id: PartTaskID(2), completion: .answered(status: 403)))
         await f.transport.deliver(TaskCompletion(id: PartTaskID(3), completion: .noAnswer))
-        await settled(within: 10_000) { await sends.ended.count == 3 }
-        for send in running { await release(send) }
+        for send in running { await send.value }
 
         let ended = await sends.ended
         XCTAssertEqual(ended, [ChunkID(1): .outcome(.reportedComplete(ChunkID(1))),
@@ -190,8 +179,7 @@ final class TransportAnswerTests: XCTestCase {
 
         let sends = Sends()
         let first = start(2, of: f, into: sends)
-        await settled(within: 10_000) { await sends.ended.count == 1 }
-        await release(first)
+        await first.value
 
         let ended = await sends.ended
         XCTAssertEqual(ended, [ChunkID(2): .outcome(.reportedComplete(ChunkID(2)))],
@@ -248,8 +236,7 @@ final class TransportAnswerTests: XCTestCase {
         let first = await awaiting(1, of: f, into: sends)
 
         await f.transport.deliver(TaskCompletion(id: PartTaskID(1), completion: .answered(status: 403)))
-        await settled(within: 10_000) { await sends.ended.count == 1 }
-        await release(first)
+        await first.value
 
         let ended = await sends.ended
         XCTAssertEqual(ended, [ChunkID(1): .outcome(.refused(ChunkID(1)))],
@@ -257,7 +244,7 @@ final class TransportAnswerTests: XCTestCase {
         let inFlight = await f.transport.inFlightChunks(of: f.intent.upload)
         XCTAssertEqual(inFlight, [], "the refused task stayed in the registry")
 
-        let second = await awaiting(1, of: f, into: sends)
+        let second = await awaiting(1, registration: 2, of: f, into: sends)
         let requests = await plane.requests
         XCTAssertEqual(requests, [ControlPlaneWire.urls(ref: "r", uploadId: "u", parts: 5),
                                   ControlPlaneWire.urls(ref: "r", uploadId: "u", parts: 5)],
@@ -286,8 +273,7 @@ final class TransportAnswerTests: XCTestCase {
         for id in 1...3 {
             await f.transport.deliver(TaskCompletion(id: PartTaskID(id), completion: .answered(status: 200)))
         }
-        await settled(within: 10_000) { await sends.ended.count == 3 }
-        for send in running { await release(send) }
+        for send in running { await send.value }
         await plane.hold([1, 2])
 
         let confirmation = try await f.transport.confirmedProgress(for: f.intent.upload, in: f.session)
@@ -339,18 +325,14 @@ final class TransportAnswerTests: XCTestCase {
 
         let sends = Sends()
         let send = start(1, of: f, into: sends)
-        // Both conditions: the task exists once the wire has been called, and it is
-        // registered under its description once a send is awaiting it. A completion
-        // delivered before the registration would name no description and be dropped.
-        await settled(within: 10_000) {
-            let calls = await f.wire.journal
-            let waiting = await f.transport.awaiting(ChunkID(1), of: f.intent.upload)
-            return calls.contains(.createTask(description: f.description(1).encoded)) && waiting == 1
-        }
+        // Both events, in the order the transport performs them: the wire starts the task,
+        // and the send then registers a waiter on it. A completion delivered before the
+        // registration would be held for a send that had not yet committed to waiting.
+        let started = await f.wire.nextStart()
+        await f.transport.whenRegistered(1, on: ChunkID(1), of: f.intent.upload)
 
-        await f.wire.complete(PartTaskID(1), with: .answered(status: 200))
-        await settled(within: 10_000) { await sends.ended.count == 1 }
-        await release(send)
+        await f.wire.complete(started, with: .answered(status: 200))
+        await send.value
 
         let ended = await sends.ended
         XCTAssertEqual(ended, [ChunkID(1): .outcome(.reportedComplete(ChunkID(1)))],
@@ -375,8 +357,7 @@ final class TransportAnswerTests: XCTestCase {
 
         let sends = Sends()
         let send = start(1, of: f, into: sends)
-        await settled(within: 10_000) { await sends.ended.count == 1 }
-        await release(send)
+        await send.value
 
         let ended = await sends.ended
         XCTAssertEqual(ended, [ChunkID(1): .outcome(.reportedComplete(ChunkID(1)))],
@@ -404,7 +385,7 @@ final class TransportAnswerTests: XCTestCase {
         for ordinal in 1...3 { running.append(await awaiting(ordinal, of: f, into: sends)) }
 
         await f.transport.deliver(TaskCompletion(id: PartTaskID(1), completion: .answered(status: 200)))
-        await settled(within: 10_000) { await sends.ended.count == 1 }
+        await running[0].value          // the send for chunk 1, the one this completion answers
         XCTAssertEqual(try f.chunkFiles.present(for: f.intent.upload),
                        [ChunkID(1), ChunkID(2), ChunkID(3)],
                        "a chunk file was deleted when a completion reported it")

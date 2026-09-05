@@ -7,8 +7,9 @@ import DunnageCore
 /// that makes the difference attributable to the one thing that differs.
 ///
 /// Deterministic (ADR-0007 §2, tier 1): the scripted wire and a canned plane, no session,
-/// no socket, no clock. Every wait here is a bounded count of yields with a message on
-/// reaching it, and nothing anywhere in this file pauses for an interval.
+/// no socket, no clock. Every wait here is on an event one of the doubles publishes — the
+/// wire's next start, the transport's count of the waiters it has stored, the send's own
+/// `Task` — and nothing anywhere in this file counts yields or pauses for an interval.
 ///
 /// **Contract, control, contrast, in that order** (spec §7 rider a, 3a2cbbe's shape). The
 /// contract test is first because the order is an argument: the control has to be a fair
@@ -195,7 +196,7 @@ final class ForgetfulTransportTests: XCTestCase {
 
         rows.append("chunk 1, answered 200: \(try await send(1, of: arm, in: session, answering: .answered(status: 200)))")
         rows.append("chunk 2, expired URL: \(try await send(2, of: arm, in: session, answering: .answered(status: 403)))")
-        rows.append("chunk 2, sent again: \(try await send(2, of: arm, in: session, answering: .answered(status: 200)))")
+        rows.append("chunk 2, sent again: \(try await send(2, of: arm, in: session, answering: .answered(status: 200), registration: 2))")
         rows.append("chunk 3, no answer: \(try await send(3, of: arm, in: session, answering: .noAnswer))")
 
         for part in 1...3 {
@@ -215,59 +216,23 @@ final class ForgetfulTransportTests: XCTestCase {
         return rows
     }
 
-    /// Hand one chunk over, let the session report `completion` for the task it started,
-    /// and give back the outcome the send returned.
+    /// Hand one chunk over, let the session report `completion` for the task the wire
+    /// started for it, and give back the outcome the send returned.
     ///
-    /// The completion is delivered only once the send is registered as awaiting its task,
-    /// which is the same sequencing the tier-1 transport tests take: a completion delivered
-    /// before the waiter exists would be held for a send that has already committed to
-    /// waiting.
+    /// Both events are awaited, in the order the transport performs them: the wire hands
+    /// out the start, and the send then registers a waiter on it. Completing before the
+    /// waiter exists would leave the outcome in `unclaimed` and the send awaiting nothing.
+    /// `registration` is the transport's cumulative count for the chunk, so the second send
+    /// for a chunk asks for the second.
     private func send(_ ordinal: Int,
                       of arm: Arm,
                       in session: TransportSessionID,
                       answering completion: PartTaskCompletion,
-                      file: StaticString = #filePath,
-                      line: UInt = #line) async throws -> TransferOutcome {
-        let before = await lastStartedTask(arm.wire)
+                      registration: Int = 1) async throws -> TransferOutcome {
         let sending = Task { try await arm.driven.send(arm.transfer(ordinal), of: arm.intent, in: session) }
-        await settled(within: 10_000, file: file, line: line) {
-            let started = await self.lastStartedTask(arm.wire)
-            let waiting = await arm.honest.awaiting(ChunkID(ordinal), of: arm.intent.upload)
-            return started != before && waiting == 1
-        }
-        guard let started = await lastStartedTask(arm.wire) else {
-            XCTFail("no task was ever started for chunk \(ordinal)", file: file, line: line)
-            sending.cancel()
-            _ = await sending.result
-            throw Untaken.noTask
-        }
+        let started = await arm.wire.nextStart()
+        await arm.honest.whenRegistered(registration, on: ChunkID(ordinal), of: arm.intent.upload)
         await arm.wire.complete(started, with: completion)
         return try await sending.value
     }
-
-    /// The most recently started task, or none. Ids are the wire's, minted in order.
-    private func lastStartedTask(_ wire: ScriptedWire) async -> PartTaskID? {
-        for call in await wire.journal.reversed() {
-            if case .start(let id) = call { return id }
-        }
-        return nil
-    }
-
-    /// Yield until `condition` holds, at most `bound` times; past the bound the test fails
-    /// naming the bound. No clock: a yield is the only thing that moves a concurrent send.
-    private func settled(within bound: Int,
-                         file: StaticString = #filePath,
-                         line: UInt = #line,
-                         _ condition: () async -> Bool) async {
-        var yields = 0
-        var holds = await condition()
-        while !holds, yields < bound {
-            await Task.yield()
-            yields += 1
-            holds = await condition()
-        }
-        XCTAssertTrue(holds, "not settled within \(bound) yields", file: file, line: line)
-    }
-
-    private enum Untaken: Error { case noTask }
 }

@@ -42,20 +42,6 @@ final class TransportDriverTests: XCTestCase {
         }
     }
 
-    /// Yield until `condition` holds, at most `bound` times; past the bound the test fails
-    /// naming it. No clock: a yield is the only way the driver's own Task moves.
-    private func settled(within bound: Int, _ condition: () async -> Bool,
-                         file: StaticString = #filePath, line: UInt = #line) async {
-        var yields = 0
-        var holds = await condition()
-        while !holds, yields < bound {
-            await Task.yield()
-            yields += 1
-            holds = await condition()
-        }
-        XCTAssertTrue(holds, "not settled within \(bound) yields", file: file, line: line)
-    }
-
     /// One chunk, one task, and a driver whose wait is granted exactly once.
     ///
     /// The granted wait is the first transfer's timeout, so the driver stops waiting and
@@ -65,10 +51,12 @@ final class TransportDriverTests: XCTestCase {
     /// creating another. The completion arrives then, and it is the second send that
     /// receives it.
     ///
-    /// The waiter this test waits for is the second send's and cannot be the first send's:
-    /// a task group does not return until its children have finished, and the cancelled
-    /// send finishes only when `abandon` has removed its waiter — so by the time
-    /// `chunkTransferInterrupted` is on the log, the first send's waiter is gone.
+    /// The registrations are counted cumulatively, so the second is the second send's and
+    /// cannot be the first send's: a task group does not return until its children have
+    /// finished, and the cancelled send finishes only when `abandon` has removed its
+    /// waiter, so the send that follows the interruption is the one that stores the second.
+    /// That the interruption is on the log before it is what the log assertion below shows,
+    /// in the position the event holds.
     func testATransferThatOutlivesTheDriversWaitIsAnsweredByTheNextSendWithoutASecondTask() async throws {
         let root = try temporaryDirectory()
         let support = root.appendingPathComponent("support", isDirectory: true)
@@ -103,17 +91,12 @@ final class TransportDriverTests: XCTestCase {
 
         clock.grant(.seconds(30))                    // the first transfer's timeout, once
         let run = Task { try await driver.run(intent) }
-        await settled(within: 100_000) {
-            let events = await recorded()
-            let waiting = await transport.awaiting(ChunkID(1), of: intent.upload)
-            return events.contains(.chunkTransferInterrupted(ChunkID(1))) && waiting == 1
-        }
+        await transport.whenRegistered(2, on: ChunkID(1), of: intent.upload)
 
         await plane.hold([1])
         await transport.deliver(TaskCompletion(id: PartTaskID(1), completion: .answered(status: 200)))
-        await settled(within: 100_000) { await UploadTransition.replay(recorded()).isTerminal }
-        run.cancel()
-        _ = await run.result
+        // The driver returns of its own accord at a terminal phase; nothing cancels it.
+        _ = try await run.value
 
         let events = await recorded()
         XCTAssertEqual(events, [

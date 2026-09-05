@@ -569,7 +569,7 @@ never registered, so nothing it might seem to show reaches any upload.
 
 ### A chunk has at most one transfer in flight, and a send for a chunk already in flight waits on it rather than starting another
 
-All eight are deterministic, under `swift test`. A `send` adopts the task already running
+All nine are deterministic, under `swift test`. A `send` adopts the task already running
 for its `(session, chunk)` or creates exactly one, and awaits it; two sends that race create
 one, because the description is marked as creating before the first await and the second
 send finds the mark. Adoption keeps one task per description, the lowest id after sorting by
@@ -595,6 +595,18 @@ for the reason Core keeps a refusal and an interruption apart. The `.noSuchUploa
 of 404 is provisional — the stand-in's, until 4b shows what the plane renders (ADR-0007 §9,
 item 2).
 
+The ninth is about the instrument the eight above wait with rather than about a send.
+`whenRegistered(_:on:of:)` returns only once the waiter it counted is one that
+`awaiting(_:of:)` can see, because it resumes from inside the store that creates the
+waiter; an implementation counting at the call site in `send` returns with nothing stored,
+which is how the test was shown red. It counts cumulatively and never the live count, so
+"the second send is waiting" has one answer where a first waiter has gone and a second
+arrived — the driver's own case. Its counter is the only state on this actor that is held
+rather than read, so it and the one call site that feeds it are compiled out of a shipped
+build (ADR-0007 O-17). What no test covers is an affordance that never resumes at all: that
+is a hang and not a red, and the only backstop for it is the bound the workflow puts on the
+job.
+
 - `testEachRouteIsBuiltAndReadExactlyAsThePlaneSpeaksIt`
 - `testOpenSessionAsksThePlaneOnceAndComposesTheIdentityFromItsAnswer`
 - `testASendMintsItsURLAtSendAndCreatesOneTaskNamedForTheChunk`
@@ -603,6 +615,7 @@ item 2).
 - `testAdoptionKeepsTheFirstTaskPerChunkAndCancelsADuplicate`
 - `testAnAwaitCancelledMidTransferLeavesTheTaskRunningAndASecondSendCreatesNothing`
 - `testWaitersOnAChunkWhoseCreationFailedAreResumedWithTheFailure`
+- `testARegistrationWaitReturnsOnlyOnceTheWaiterItCountsIsObservable`
 
 ### What a session reported is an answer the driver received, and confirmed progress comes only from what the authority holds
 
@@ -722,41 +735,45 @@ that deletes the two it confirms. The double's own contract for the parameter
 
 ### Phase 5's doubles keep the contracts they stand in for
 
-All ten are deterministic: three under `swift test`, and seven under vitest against a
-server the suite starts in-process on a port the operating system assigns. The scripted
-wire stands in for `PartTaskSession`, this repository's contract for the daemon and the
-wire together, and never for `URLSession`: a double of a vendor's product runs a guess
-against itself (ADR-0007 §9). It holds exactly the tasks seeded or created and forgets a
-cancelled one, delivers each completion once in the order the test gave them, and counts
-a receipt per task created whose description names a part and none for one that does not
-parse. The stand-in is the same kind of double, of the four routes ADR-0006 §4 wrote
-down and a PUT per part, and never of S3. Its counter counts receipts, one per PUT
-stored for a `(uploadId, part)` and including one that replaced bytes already held —
-accepted rather than refused, which is what ADR-0001 wrote the invariant's weaker claim
-against — so a part sent again is a number a test reads and not an inference from
-timing. `hold` withholds an answer in two modes: `after-store` stores the bytes first,
-so `/parts` reports the part while its answer is still outstanding, and `before-store`
-stores nothing until release and is the device harness's alone (spec §3.3), never a CI
-assertion. "Withheld" is asserted as an ordering and not a duration — the PUT's promise
-has not settled at a point where a `/parts` round trip has already been answered — and
-that shows the answer had not arrived by that point, not that it never would have. The
+All eleven are deterministic: four under `swift test`, and seven under vitest against a
+server the suite starts in-process on a port the operating system assigns. The scripted wire
+stands in for `PartTaskSession`, this repository's contract for the daemon and the wire
+together, and never for `URLSession`: a double of a vendor's product runs a guess against
+itself (ADR-0007 §9). It holds exactly the tasks seeded or created and forgets a cancelled
+one, delivers each completion once in the order the test gave them, counts a receipt per
+task created whose description names a part and none for one that does not parse, and hands
+out the tasks it was told to start, oldest first and one caller each. The starts are a queue
+and not an edge, which is what the fourth test is for: they are what a test waits on for a
+send running concurrently, and a signal that could be missed by asking a moment late would
+be the race a yield count already had, in a new shape. The stand-in is the same kind of
+double, of the four routes ADR-0006 §4 wrote down and a PUT per part, and never of S3. Its
+counter counts receipts, one per PUT stored for a `(uploadId, part)` and including one that
+replaced bytes already held — accepted rather than refused, which is what ADR-0001 wrote the
+invariant's weaker claim against — so a part sent again is a number a test reads and not an
+inference from timing. `hold` withholds an answer in two modes: `after-store` stores the
+bytes first, so `/parts` reports the part while its answer is still outstanding, and
+`before-store` stores nothing until release and is the device harness's alone (spec §3.3),
+never a CI assertion. "Withheld" is asserted as an ordering and not a duration — the PUT's
+promise has not settled at a point where a `/parts` round trip has already been answered —
+and that shows the answer had not arrived by that point, not that it never would have. The
 parity diff asks the four handlers and the four stand-in routes the twelve refusals both
-owe, through one instrument, and compares the status and the named `error` and nothing
-else: the ids, URLs, part lists and etags differ by construction, so a diff over them
-would compare fixtures rather than behaviour. The table holds refusals only, and that is
-a property rather than a convenience — every row is decided before any `S3Client` is
+owe, through one instrument, and compares the status and the named `error` and nothing else:
+the ids, URLs, part lists and etags differ by construction, so a diff over them would
+compare fixtures rather than behaviour. The table holds refusals only, and that is a
+property rather than a convenience — every row is decided before any `S3Client` is
 constructed, which is exactly what lets the plane's side answer on a machine with no
-credential. None of ADR-0007 §9's three assumptions is in it, each for a reason of its
-own: no handler serves a PUT, so the 403 has nothing on the plane's side to be diffed
-against; the plane renders no 404 for an uploadId not under the key, `NoSuchUpload`
-escaping `parts.ts` and `complete.ts` unhandled, and diffing a 404 against an unhandled
-error would assert the plane behaves as it does not; and the plane cannot refuse an
-incomplete complete at all, not knowing the plan's N. Each is the stand-in's own, each
-is tested here as the stand-in's own, and each is 4b's contract run to settle.
+credential. None of ADR-0007 §9's three assumptions is in it, each for a reason of its own:
+no handler serves a PUT, so the 403 has nothing on the plane's side to be diffed against;
+the plane renders no 404 for an uploadId not under the key, `NoSuchUpload` escaping
+`parts.ts` and `complete.ts` unhandled, and diffing a 404 against an unhandled error would
+assert the plane behaves as it does not; and the plane cannot refuse an incomplete complete
+at all, not knowing the plan's N. Each is the stand-in's own, each is tested here as the
+stand-in's own, and each is 4b's contract run to settle.
 
 - `testTheScriptedWireHoldsExactlyTheTasksCreatedOrSeededAndForgetsACancelledOne`
 - `testTheScriptedWireDeliversEachCompletionOnceInTheOrderTheTestGaveThem`
 - `testTheScriptedWireCountsAReceiptPerTaskCreatedAndNoneForAnUnparseableOne`
+- `testTheScriptedWireHandsOutEveryStartOnceInTheOrderItWasMade`
 - `testAPartReceivedIsCountedEvenWhenItReplacesOneAlreadyHeld`
 - `testAHoldAfterStoreIsHeldByPartsAndWithholdsTheAnswer`
 - `testAHoldBeforeStoreWithholdsAndHoldsNothingUntilRelease`

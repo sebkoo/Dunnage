@@ -311,6 +311,9 @@ public actor BackgroundSessionTransport {
 
     private func store(_ waiter: Waiter, for description: TaskDescription, ticket: Ticket) {
         waiters[description, default: [:]][ticket] = waiter
+        #if DEBUG
+        noteRegistration(description)
+        #endif
     }
 
     /// Cancel one await: remove its waiter and resume it throwing. The task it awaited is
@@ -332,6 +335,74 @@ public actor BackgroundSessionTransport {
         guard let pending = waiters.removeValue(forKey: description) else { return }
         for waiter in pending.values { waiter.resume(throwing: error) }
     }
+
+#if DEBUG
+    /// How many waiters `store` has put on each description since this transport was made,
+    /// and the observations waiting for a count to be reached.
+    ///
+    /// **Test-only state, and the only state here that is held rather than read.**
+    /// `awaiting(_:of:)` and `unclaimedCount(_:of:)` beside it are probes over dictionaries
+    /// this transport keeps anyway and cost nothing; this one keeps an `Int` per
+    /// `TaskDescription` that nothing decrements, on an actor that lives as long as the
+    /// process. There is no per-upload site to drop it at — `finalize` clears nothing here,
+    /// `confirmedProgress` discards chunk files through `ChunkFiles`, and `deliver`'s
+    /// removal is per description, where a reset would zero a count the tests read as
+    /// cumulative — and inventing one for a counter no shipped code reads is the
+    /// speculative abstraction this repository refuses. So it never exists in a shipped
+    /// build: everything under this `#if DEBUG`, including the one call `store` makes, is
+    /// compiled out of a Release configuration.
+    ///
+    /// **Cumulative and not current.** A threshold on the live count cannot tell "one
+    /// waiter arrived" from "a first waiter has gone and a second arrived", which is
+    /// exactly `TransportDriverTests`'s case: the driver's timeout removes the first send's
+    /// waiter before the send that follows the interruption stores its own.
+    private var registrations: [TaskDescription: Int] = [:]
+    private var registrationObservers: [RegistrationObserver] = []
+
+    private struct RegistrationObserver {
+        let upload: UploadID
+        let chunk: ChunkID
+        let count: Int
+        let continuation: CheckedContinuation<Void, Never>
+    }
+
+    /// Return once `count` sends have registered a waiter on `chunk` of `upload`, counting
+    /// every waiter stored since this transport was made — at once if that many already
+    /// have.
+    ///
+    /// It resumes from inside `store(_:for:ticket:)`, where the waiter comes to exist, so
+    /// when this returns the registration it counted is one `awaiting(_:of:)` can see. The
+    /// count sums every description matching `(upload, chunk)`, as `awaiting(_:of:)`
+    /// filters, so nothing here resolves an upload to a session.
+    func whenRegistered(_ count: Int, on chunk: ChunkID, of upload: UploadID) async {
+        if registered(chunk, of: upload) >= count { return }
+        await withCheckedContinuation { continuation in
+            registrationObservers.append(
+                RegistrationObserver(upload: upload, chunk: chunk, count: count,
+                                     continuation: continuation))
+        }
+    }
+
+    private func registered(_ chunk: ChunkID, of upload: UploadID) -> Int {
+        registrations.filter { $0.key.upload == upload && $0.key.chunk == chunk }
+            .reduce(0) { $0 + $1.value }
+    }
+
+    /// One more waiter on this description, and every observation the new count satisfies.
+    private func noteRegistration(_ description: TaskDescription) {
+        registrations[description, default: 0] += 1
+        var stillWaiting: [RegistrationObserver] = []
+        for observer in registrationObservers {
+            if observer.upload == description.upload, observer.chunk == description.chunk,
+               registered(observer.chunk, of: observer.upload) >= observer.count {
+                observer.continuation.resume()
+            } else {
+                stillWaiting.append(observer)
+            }
+        }
+        registrationObservers = stillWaiting
+    }
+#endif
 }
 
 extension BackgroundSessionTransport: UploadTransport {}

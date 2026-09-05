@@ -422,6 +422,14 @@ team, and the claim about credentials is unchanged either way.
 
 ### O-17. A tier-1 wait that counts yields and not progress
 
+**Decided by the commit "wait on the event a double publishes, and let the runner bound the
+wait".** The paragraphs below record why it was left open, and what they name has since been
+done: `settled(within:)` is gone from all four files that held a copy of it, the doubles
+publish the events the tests were polling for — the scripted wire hands out its starts, the
+transport counts the waiters it has stored — and a test awaits the event, its own `Task`, or
+nothing at all. The reproduction below was run again there, under one load on one machine,
+against both forms of the same tests: the polling form failed and the awaiting form passed.
+
 `settled(within:)` — the helper the transport's tier-1 tests wait with — loops
 `await Task.yield()` a fixed number of times and fails when the count runs out. The count is
 not a measure of progress: under CPU starvation a poller can spend its whole budget before
@@ -439,11 +447,24 @@ runner, and therefore whether the exposure is the test's or the machine's.
 Raising the bound is refused: "deterministic only" is not "deterministic if you wait long
 enough", and a larger number makes a test slower to fail without making it more correct.
 **The commit after this one closes it by removing the poll**: the double publishes the
-event — a continuation or `AsyncStream` the wire fulfils when it starts a task, and the
-transport when it registers a waiter — and the test awaits that. No clock, no bound, no
-yield count; a genuine failure then hangs until XCTest's own per-test timeout, which is the
-runner's backstop and not a wait the test performs. An `XCTWaiter` timeout is refused for
-the same reason as a larger bound: it is a wall-clock wait wearing a different hat.
+event — a queue of starts the wire hands out, and the count of waiters the transport has
+stored — and the test awaits that. No clock, no bound, no yield count; a genuine failure
+then hangs. An `XCTWaiter` timeout is refused for the same reason as a larger bound: it is
+a wall-clock wait wearing a different hat.
+
+**CORRECTION, made by the same commit.** The sentence written here first said the hang runs
+"until XCTest's own per-test timeout, which is the runner's backstop". That was asserted and
+not checked, and it is wrong. Measured with a throwaway test holding a continuation nothing
+resumes: `swift test` enforces no per-test timeout and names nothing — the test ran 300 s
+until a probe killed it, printing nothing at all with output captured, which is how CI reads
+it — and `xcrun xctest -test-timeouts-enabled YES` hung too, so the flag does not reach the
+bare harness. The allowance is enforced by the runner `xcodebuild` drives, where it works,
+fails at the allowance with the test named, exits 65, and rounds up to a whole minute.
+Today's real backstop is the workflow's, and until that commit `ci.yml` set
+`timeout-minutes` on none of its five jobs. It now sets 10 on **build and test** and 30 on
+**app simulator**, and adds `-test-timeouts-enabled YES
+-default-test-execution-time-allowance` to the app job's `xcodebuild test` step, which is
+the one place a hang can be made to red naming the test rather than cancelling a job.
 
 ## Observed on a device
 

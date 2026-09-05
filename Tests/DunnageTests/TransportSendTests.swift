@@ -8,8 +8,9 @@ import DunnageCore
 /// ADR-0007 §4: a `send` looks for an adopted or created task for `(session, chunk)`; if
 /// one is in flight it awaits that task and does not create another. The driver's timeout
 /// cancels the await, never the task. Deterministic, on the scripted wire and a canned
-/// plane: a test that waits for a concurrent send to reach a point yields a bounded number
-/// of times and fails naming the bound; nothing here waits on a clock. Nothing
+/// plane: a test that waits for a concurrent send to reach a point awaits the event that
+/// takes it there — the wire's next start, or the transport's own count of the waiters it
+/// has stored — so nothing here waits on a clock and nothing counts yields. Nothing
 /// resumes a waiter with an outcome yet — the completion listener is a later commit's —
 /// so every send here is cancelled at the end, and its await throws `CancellationError`.
 final class TransportSendTests: XCTestCase {
@@ -73,20 +74,6 @@ final class TransportSendTests: XCTestCase {
         }
     }
 
-    /// Yield until `condition` holds, at most `bound` times; past the bound the test fails
-    /// naming it. No clock: a yield is the only way the concurrent send moves.
-    private func settled(within bound: Int, _ condition: () async -> Bool,
-                         file: StaticString = #filePath, line: UInt = #line) async {
-        var yields = 0
-        var holds = await condition()
-        while !holds, yields < bound {
-            await Task.yield()
-            yields += 1
-            holds = await condition()
-        }
-        XCTAssertTrue(holds, "not settled within \(bound) yields", file: file, line: line)
-    }
-
     /// A gate the test opens: the canned plane's closure waits on it, so a send can be held
     /// inside `/urls` while a second send arrives. The test's own, captured by its closure.
     private actor Latch {
@@ -140,7 +127,7 @@ final class TransportSendTests: XCTestCase {
         let created = ScriptedWire.Call.createTask(description: f.description(1).encoded)
 
         let send = Task { try await f.transport.send(f.transfer(1), of: f.intent, in: f.session) }
-        await settled(within: 10_000) { await f.wire.journal.contains(created) }
+        _ = await f.wire.nextStart()
 
         let requests = await journal.requests
         XCTAssertEqual(requests, [ControlPlaneWire.urls(ref: "r", uploadId: "u", parts: 5)],
@@ -164,11 +151,7 @@ final class TransportSendTests: XCTestCase {
 
         let first = Task { try await f.transport.send(f.transfer(1), of: f.intent, in: f.session) }
         let second = Task { try await f.transport.send(f.transfer(1), of: f.intent, in: f.session) }
-        await settled(within: 10_000) {
-            let inFlight = await f.transport.inFlightChunks(of: f.intent.upload)
-            let waiting = await f.transport.awaiting(ChunkID(1), of: f.intent.upload)
-            return inFlight.contains(ChunkID(1)) && waiting == 2
-        }
+        await f.transport.whenRegistered(2, on: ChunkID(1), of: f.intent.upload)
 
         let calls = await f.wire.journal
         XCTAssertEqual(calls, [.createTask(description: f.description(1).encoded), .start(PartTaskID(1))],
@@ -190,7 +173,7 @@ final class TransportSendTests: XCTestCase {
         await f.transport.adopt()
 
         let send = Task { try await f.transport.send(f.transfer(2), of: f.intent, in: f.session) }
-        await settled(within: 10_000) { await f.transport.awaiting(ChunkID(2), of: f.intent.upload) == 1 }
+        await f.transport.whenRegistered(1, on: ChunkID(2), of: f.intent.upload)
 
         let calls = await f.wire.journal
         XCTAssertEqual(calls, [.pendingTasks], "a send for a chunk already in flight touched the wire")
@@ -209,10 +192,9 @@ final class TransportSendTests: XCTestCase {
     func testAnAwaitCancelledMidTransferLeavesTheTaskRunningAndASecondSendCreatesNothing() async throws {
         let journal = PlaneJournal()
         let f = try fixture(plane: signingPlane(journal))
-        let created = ScriptedWire.Call.createTask(description: f.description(1).encoded)
 
         let first = Task { try await f.transport.send(f.transfer(1), of: f.intent, in: f.session) }
-        await settled(within: 10_000) { await f.wire.journal.contains(created) }
+        _ = await f.wire.nextStart()
         first.cancel()
         switch await first.result {
         case .failure(let error):
@@ -230,7 +212,9 @@ final class TransportSendTests: XCTestCase {
         XCTAssertEqual(stillWaiting, 0, "the cancelled await left its waiter behind")
 
         let second = Task { try await f.transport.send(f.transfer(1), of: f.intent, in: f.session) }
-        await settled(within: 10_000) { await f.transport.awaiting(ChunkID(1), of: f.intent.upload) == 1 }
+        // Two, cumulatively: the cancelled await stored a waiter of its own before the
+        // cancellation removed it, and this is the send that follows it.
+        await f.transport.whenRegistered(2, on: ChunkID(1), of: f.intent.upload)
         let puts = await f.wire.puts(part: 1)
         XCTAssertEqual(puts, 1, "a second send after the cancelled await created another task")
 
@@ -251,12 +235,13 @@ final class TransportSendTests: XCTestCase {
 
         let first = Task { try await f.transport.send(f.transfer(1), of: f.intent, in: f.session) }
         let second = Task { try await f.transport.send(f.transfer(1), of: f.intent, in: f.session) }
-        await settled(within: 10_000) { await f.transport.awaiting(ChunkID(1), of: f.intent.upload) == 1 }
+        await f.transport.whenRegistered(1, on: ChunkID(1), of: f.intent.upload)
 
         await latch.open()
-        await settled(within: 10_000) { await f.transport.awaiting(ChunkID(1), of: f.intent.upload) == 0 }
-        // No-ops once both have ended; in a run where the waiter was never resumed, this is
-        // what lets it go, so nothing outlives the test and the failure names itself.
+        // Both sends end of their own accord — the first on the refusal it was thrown, the
+        // second on the drain that refusal performs — and the cancel is a no-op by then. In
+        // a run where the waiter was never resumed, this is what lets it go, so nothing
+        // outlives the test and the assertions below name themselves.
         await release(first)
         await release(second)
 
@@ -275,5 +260,28 @@ final class TransportSendTests: XCTestCase {
         XCTAssertEqual(inFlight, [], "a chunk whose creation failed is still in flight")
         let waiting = await f.transport.awaiting(ChunkID(1), of: f.intent.upload)
         XCTAssertEqual(waiting, 0, "a waiter is still waiting on a creation that failed")
+    }
+
+    /// A registration wait returns only once the waiter it counted is observable.
+    ///
+    /// Every other wait in these three files leans on this: `whenRegistered` resumes from
+    /// inside `store(_:for:ticket:)`, where the waiter comes to exist, so a send that has
+    /// been counted is a send `awaiting(_:of:)` can see. An implementation that counted at
+    /// the call site in `send` — before the URL is minted and the task created — would
+    /// return here with nothing stored.
+    ///
+    /// What it cannot cover: an affordance that never resumes at all is a hang and not a
+    /// red, and the only backstop for that is the job's own bound (ADR-0007 O-17).
+    func testARegistrationWaitReturnsOnlyOnceTheWaiterItCountsIsObservable() async throws {
+        let journal = PlaneJournal()
+        let f = try fixture(plane: signingPlane(journal))
+
+        let send = Task { try await f.transport.send(f.transfer(1), of: f.intent, in: f.session) }
+        await f.transport.whenRegistered(1, on: ChunkID(1), of: f.intent.upload)
+
+        let waiting = await f.transport.awaiting(ChunkID(1), of: f.intent.upload)
+        XCTAssertEqual(waiting, 1, "the registration wait returned before the waiter it counted existed")
+
+        await release(send)
     }
 }

@@ -33,6 +33,13 @@ jobs:
     # Pinned. macos-latest moves between macOS versions, and moving it silently changes
     # the toolchain this job is supposed to be running against.
     runs-on: macos-26
+    # The only backstop this job has against a hung test. `swift test` enforces no per-test
+    # timeout and names nothing: with output captured, a hung test prints not one line for
+    # as long as it runs (ADR-0007 O-17), and without this the job would be cancelled at
+    # GitHub's six-hour default naming no test at all. Ten minutes is about ten times the
+    # observed worst — 47 s, 53 s and 57 s on the last three green runs on main — because
+    # it bounds the whole job and not one test, and a bound that tight would be a flake.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
 
@@ -211,6 +218,11 @@ jobs:
     # Pinned for the same reason as build-and-test, and macOS because this job boots a
     # simulator and runs xcodebuild.
     runs-on: macos-26
+    # The outer bound, for the reason build-and-test has one. Thirty because this job
+    # builds, boots a device and runs two bundles: 6m07s and 10m49s on the last two green
+    # runs on main. The flags on the test step below bound test execution alone, and
+    # neither the build nor the boot nor the enumeration, which is why this one is here too.
+    timeout-minutes: 30
     # The stand-in's bundle is cloud-stack's artifact. needs: gates on success, so a red
     # cloud stack skips this job rather than running the app against a bundle nobody
     # checked.
@@ -357,6 +369,21 @@ jobs:
       # difference causes it is UNVERIFIED and is ADR-0007 O-16. Ad-hoc needs no Apple
       # account, no profile and no team, so the claim CI makes about credentials is
       # unchanged.
+      #
+      # The two timeout flags are here and nowhere else, because this is the only runner in
+      # the repository that implements them: `swift test`'s harness ignores
+      # -test-timeouts-enabled entirely, and under the runner xcodebuild drives a hang fails
+      # at the allowance with the test named in the failure line and exits 65 (ADR-0007
+      # O-17). That is strictly better than the job bound above, which cancels and names
+      # nothing. The allowance is per test and bounds test execution only.
+      #
+      # 300 s: the rule is the slowest per-test duration printed, times four, rounded up to
+      # a whole minute, and never below 300. The slowest here was 12.1 s — ControlUITests,
+      # measured on this repository's own simulator run — so four times it rounds to one
+      # minute and the floor governs. A first CI run that fails at the allowance rather than
+      # at an assertion means the number is too tight for a runner slower than that machine:
+      # raise it with the observed duration and record it, never drop the flag, which is the
+      # only thing that makes a hang name the test.
       - name: Test the app on the simulator
         run: |
           set -u
@@ -364,8 +391,10 @@ jobs:
           xcodebuild test \
             -project App/Dunnage.xcodeproj -scheme Dunnage \
             -destination "platform=iOS Simulator,id=$SIMULATOR_UDID" \
+            -test-timeouts-enabled YES \
+            -default-test-execution-time-allowance 300 \
             -resultBundlePath "$RUNNER_TEMP/app-tests.xcresult"
-          echo "the app's two bundles passed against the stand-in at $STANDIN_BASE_URL"
+          echo "the app's two bundles passed against the stand-in at $STANDIN_BASE_URL, with a 300 s per-test allowance"
 
       # On failure only, and it is the whole point of writing one: a red on the simulator
       # is diagnosable from the first run rather than from a re-run nobody can reproduce
