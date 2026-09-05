@@ -88,6 +88,11 @@ connection is not; it is the absence of an answer about one chunk.
 Repeated interruption may eventually lead somewhere terminal, but the reason recorded there
 is the decision that was taken, not the weather that prompted it.
 
+UNVERIFIED: the background semantics of `userForceQuit` as against `systemTerminated`. They
+are different reasons here, and which of them lets a transfer continue is not observable in
+any suite this repository runs — ADR-0007 §2's third tier is where it is recorded, on a
+device, by a written procedure.
+
 ## What this buys, and what it does not
 
 Core still cannot tell whether an interrupted chunk landed. That is not a gap to be closed

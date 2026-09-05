@@ -200,6 +200,14 @@ real bucket, and that run is recorded before anything trusts `S3UploadTransport`
    transport really did mint.
 4. A presigned PUT signed for one part number and one uploadId is refused for any other.
    **If it is not**, the URL is not as narrow as claim 2 says and claim 2 must be reworded.
+5. S3 does not enforce a hoisted `x-amz-checksum-crc32` on a presigned PUT. **If it does**,
+   a URL signed without one is refused. The setting that removes the default is correct
+   under either answer, and only the default carrying a CRC32 of an empty body depends on
+   it.
+6. Two requests that compose the same key land on one object in the bucket. **If they do
+   not**, the negative control demonstrates a collision in the key those requests compose
+   and not in what the bucket holds, which is the statement its own commit was careful to
+   make.
 
 ### 5. ADR-0001 O-2 closes: no database
 
