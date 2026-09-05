@@ -735,7 +735,7 @@ that deletes the two it confirms. The double's own contract for the parameter
 
 ### Phase 5's doubles keep the contracts they stand in for
 
-All eleven are deterministic: four under `swift test`, and seven under vitest against a
+All twelve are deterministic: four under `swift test`, and eight under vitest against a
 server the suite starts in-process on a port the operating system assigns. The scripted wire
 stands in for `PartTaskSession`, this repository's contract for the daemon and the wire
 together, and never for `URLSession`: a double of a vendor's product runs a guess against
@@ -777,6 +777,7 @@ stand-in's own, and each is 4b's contract run to settle.
 - `testAPartReceivedIsCountedEvenWhenItReplacesOneAlreadyHeld`
 - `testAHoldAfterStoreIsHeldByPartsAndWithholdsTheAnswer`
 - `testAHoldBeforeStoreWithholdsAndHoldsNothingUntilRelease`
+- `testAHoldsEventsAreStillPublishedToACallerThatAsksAfterTheyHappened`
 - `testAUrlIsRefusedForAnotherPartAndAfterItsExpiry`
 - `testAnUploadIdNotUnderTheKeyIsRefused`
 - `testACompleteOverPartsItDoesNotHoldIsRefused`

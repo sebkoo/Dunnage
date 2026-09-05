@@ -238,12 +238,12 @@ final class TransportSendTests: XCTestCase {
         await f.transport.whenRegistered(1, on: ChunkID(1), of: f.intent.upload)
 
         await latch.open()
-        // Both sends end of their own accord — the first on the refusal it was thrown, the
-        // second on the drain that refusal performs — and the cancel is a no-op by then. In
-        // a run where the waiter was never resumed, this is what lets it go, so nothing
-        // outlives the test and the assertions below name themselves.
-        await release(first)
-        await release(second)
+        // No cancel here. Both sends end of their own accord — the first on the refusal it
+        // was thrown, the second on the drain that refusal performs — and `release` cancels
+        // before the refusal has propagated, which answers this test's own question with a
+        // CancellationError rather than with the plane's. A run where a waiter is never
+        // resumed hangs rather than failing on the wrong error, and the runner bounds it
+        // (O-17).
 
         for (which, result) in [("first", await first.result), ("second", await second.result)] {
             switch result {

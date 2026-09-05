@@ -48,10 +48,20 @@ const MAX_PART_NUMBER = 10_000
 
 type HoldMode = 'after-store' | 'before-store'
 
+// A hold is also what the suite waits on. `arrived` resolves once the PUT's body has been
+// read and the request has found this hold; `stored` resolves once `store()` has run for
+// it. They hang on the hold rather than on the server, which is what makes them lossless
+// without a counter: the promise exists from the moment the hold is registered, so a
+// caller asking after the event is answered by an already-resolved promise, and
+// `/_standin/reset` drops them with the holds it already clears.
 type Hold = {
   readonly mode: HoldMode
   readonly withheld: Promise<void>
   readonly release: () => void
+  readonly arrived: Promise<void>
+  readonly announceArrival: () => void
+  readonly stored: Promise<void>
+  readonly announceStored: () => void
 }
 
 type Upload = {
@@ -72,7 +82,22 @@ export type StandInOptions = {
   readonly now?: () => number
 }
 
-export function createStandIn(options: StandInOptions = {}): Server {
+// The handle the vitest suite holds. It is a `Server` — `listen`, `close`,
+// `closeAllConnections` — plus the two events a hold publishes, and they are reachable
+// only in process. **No `/_standin/` route is added, and that is the decision**: the suite
+// starts this server itself (`createStandIn({ now })`, `listen(0)`) and can await a
+// promise directly, so a control route would widen the surface spec §3.3 documents and
+// `docs/device-harness.md` quotes for a problem that exists only inside the test process.
+// `main()` below, which is what the bundle runs, is untouched.
+export interface StandIn extends Server {
+  // Resolves once the PUT for `part` has had its body read and has found the hold.
+  whenArrived(part: number): Promise<void>
+  // Resolves once `store()` has run for that PUT — after the bytes under `after-store`,
+  // after the release under `before-store`.
+  whenStored(part: number): Promise<void>
+}
+
+export function createStandIn(options: StandInOptions = {}): StandIn {
   const now = options.now ?? (() => Date.now())
   // Per process, and never written down. A URL is a token over `(uploadId, part, expiry)`
   // signed with it, so the two refusals ADR-0007 §9 item 1 records are decidable from the
@@ -243,13 +268,16 @@ export function createStandIn(options: StandInOptions = {}): Server {
 
     const body = await readBody(req)
     const hold = holds.get(part)
+    hold?.announceArrival()
 
     if (hold?.mode === 'after-store') {
       store(uploadId, part, body)
+      hold.announceStored()
       await hold.withheld
     } else if (hold?.mode === 'before-store') {
       await hold.withheld
       store(uploadId, part, body)
+      hold.announceStored()
     } else {
       store(uploadId, part, body)
     }
@@ -309,11 +337,21 @@ export function createStandIn(options: StandInOptions = {}): Server {
       if (part === undefined || (mode !== 'after-store' && mode !== 'before-store')) {
         return json(res, 400, { error: 'a hold names a part and one of after-store, before-store' })
       }
-      let release = (): void => {}
-      const withheld = new Promise<void>(resolve => {
-        release = resolve
+      // Three one-shot settlements: the withheld answer, and the two events. Announcing an
+      // event twice would be harmless — a promise settles once — so `receivePart` never
+      // has to ask whether anyone is listening.
+      const answer = deferred()
+      const arrival = deferred()
+      const storing = deferred()
+      holds.set(part, {
+        mode,
+        withheld: answer.promise,
+        release: answer.settle,
+        arrived: arrival.promise,
+        announceArrival: arrival.settle,
+        stored: storing.promise,
+        announceStored: storing.settle,
       })
-      holds.set(part, { mode, withheld, release })
       return json(res, 200, { held: [...holds.keys()].sort((a, b) => a - b) })
     }
     if (method === 'POST' && path[1] === 'release' && path.length === 2) {
@@ -345,7 +383,30 @@ export function createStandIn(options: StandInOptions = {}): Server {
     return expected.length === given.length && timingSafeEqual(expected, given)
   }
 
-  return server
+  // The event is the hold's, so asking for a part no hold was registered for cannot be
+  // answered by waiting — there is nothing that will ever publish it. That is a mistake in
+  // the caller and it throws rather than hanging the suite.
+  function held(part: number, event: string): Hold {
+    const hold = holds.get(part)
+    if (hold === undefined) {
+      throw new Error(`no hold on part ${part}, so its ${event} is published to nobody`)
+    }
+    return hold
+  }
+
+  return Object.assign(server, {
+    whenArrived: (part: number): Promise<void> => held(part, 'arrival').arrived,
+    whenStored: (part: number): Promise<void> => held(part, 'store').stored,
+  })
+}
+
+// A promise and the hand that settles it, which is every one-shot signal a hold carries.
+function deferred(): { promise: Promise<void>; settle: () => void } {
+  let settle = (): void => {}
+  const promise = new Promise<void>(resolve => {
+    settle = resolve
+  })
+  return { promise, settle }
 }
 
 // 403, with no body. The transport reads the status and nothing else (ADR-0007 §5), and a

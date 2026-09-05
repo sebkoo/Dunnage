@@ -1,7 +1,7 @@
-import type { Server } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest'
 import { EXPIRES_IN_SECONDS } from '../handlers/urls'
+import type { StandIn } from '../standin/server'
 import { createStandIn } from '../standin/server'
 
 // Claim 6. The stand-in's own contract, asked of the stand-in and of nothing else. Every
@@ -21,7 +21,7 @@ import { createStandIn } from '../standin/server'
 // server that reads time, and the alternative to a virtual clock here is a suite that waits
 // out 900 real seconds. Moved by the expiry test and by nothing else.
 let now = 0
-let server: Server
+let server: StandIn
 let base = ''
 
 beforeAll(async () => {
@@ -127,6 +127,11 @@ describe("the stand-in's own contract", () => {
     await control('POST', '/_standin/hold', { part: 1, mode: 'after-store' })
 
     const answering = fetch(first, { method: 'PUT', body: 'the bytes' })
+    // The wait the reading below needs, and it is an event and not an assumption: the hold
+    // resolves this once `store()` has run for that PUT. Nothing else orders the PUT
+    // against the `/parts` round trip that follows, and on a loaded runner the query won —
+    // `parts: []` for bytes stored a moment later, which is the whole claim inverted.
+    await server.whenStored(1)
     const marker = 'the answer had not arrived by this point'
     const whileHeld = {
       parts: await heldParts('sub-1', 'photo.jpg', uploadId),
@@ -156,6 +161,12 @@ describe("the stand-in's own contract", () => {
     await control('POST', '/_standin/hold', { part: 1, mode: 'before-store' })
 
     const answering = fetch(first, { method: 'PUT', body: 'the bytes' })
+    // The arrival, waited for rather than assumed, and here it is what gives the empty
+    // reading its meaning: `parts: []` after the body has been read says the mode stored
+    // nothing, where the same `[]` before it says only that the request had not landed
+    // yet. Both satisfy the expectation, so without this wait the test can pass having
+    // observed nothing at all.
+    await server.whenArrived(1)
     const marker = 'the answer had not arrived by this point'
     const whileHeld = {
       parts: await heldParts('sub-1', 'photo.jpg', uploadId),
@@ -261,6 +272,38 @@ describe("the stand-in's own contract", () => {
       refused: { status: 400, error: 'incomplete upload' },
       accepted: { status: 200, error: undefined, hasEtag: true },
       counters: { puts: { '1': 1, '2': 1, '3': 1 }, completes: 1, held: [] },
+    })
+  })
+
+  // The affordance the two tests above wait on, held to its own contract. The events are
+  // the hold's — one promise each, made when `POST /_standin/hold` registers it — so they
+  // are lossless: a caller that asks after the event has already happened is answered by
+  // an already-resolved promise, and never left waiting for a publication it missed.
+  //
+  // That is the property an edge would not have. A signal delivered only to whoever was
+  // waiting at the moment it fired would leave both races below to the marker, which is
+  // exactly the shape of race this commit removes, arriving inside the instrument that
+  // removes it.
+  //
+  // Asked the way the file asks it elsewhere: raced against a marker resolved in the same
+  // turn, where the already-settled promise wins and a pending one loses.
+  test('testAHoldsEventsAreStillPublishedToACallerThatAsksAfterTheyHappened', async () => {
+    const uploadId = await openUpload('sub-1', 'photo.jpg', 1)
+    const [first] = await partUrls('sub-1', 'photo.jpg', uploadId, 1)
+    await control('POST', '/_standin/hold', { part: 1, mode: 'after-store' })
+
+    const answering = fetch(first, { method: 'PUT', body: 'the bytes' })
+    await server.whenStored(1)
+    const marker = 'the event was published to nobody and this caller asked too late'
+    const askedAfterwards = {
+      arrived: await Promise.race([server.whenArrived(1), Promise.resolve(marker)]),
+      stored: await Promise.race([server.whenStored(1), Promise.resolve(marker)]),
+    }
+
+    await control('POST', '/_standin/release', { part: 1 })
+    expect({ askedAfterwards, status: (await answering).status }).toEqual({
+      askedAfterwards: { arrived: undefined, stored: undefined },
+      status: 200,
     })
   })
 })
