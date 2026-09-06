@@ -28,9 +28,28 @@ class StandInUITestCase: XCTestCase {
     /// nothing else, and the counts below bound each wait whole.
     nonisolated static let tryInterval: TimeInterval = 0.25
 
-    /// Until a control call is answered: 5 s. The stand-in is a local process with nothing
-    /// to do, so a call it has not answered in twenty tries is a call it is not going to.
+    /// Until a control call is answered: 5 s. The stand-in is a local process with nothing to
+    /// do, so a call it has not answered in twenty questions is a call it is not going to —
+    /// **and that is true only because `setUp` has already paid for reaching it.** This bound
+    /// was measuring the first connection from this process as well as the answering, and a
+    /// stand-in that was merely slow to reach read as one that would not answer.
     nonisolated static let controlTries = 20
+
+    /// Until the stand-in answers at all: 60 s. **Not a bound on answering — a bound on
+    /// reaching**, and it is deliberately not derived from the thing it bounds. The only two
+    /// observations of a first connection completing are both contaminated: one by twenty
+    /// abandoned requests contending for a handful of connection slots, one by a gap in the
+    /// log that nothing explains. Sizing from either would be inventing precision.
+    ///
+    /// It is sized instead from what this job does measure — starting its node process has
+    /// taken 10 s to 51 s on this runner class and booting its simulator 83 s to 157 s — and
+    /// from the runner's own backstop: 60 s is a fifth of
+    /// `-default-test-execution-time-allowance`, so this assertion reds with its own message
+    /// long before the runner cancels the test with a generic one.
+    ///
+    /// A first contact that ever exceeds it is a finding to record, never a reason to raise
+    /// it.
+    nonisolated static let firstContactTries = 240
 
     /// Until the stand-in lists the upload the app opened: 15 s. It appears when the app's
     /// `POST /uploads` is answered, which is the first thing the driver does.
@@ -76,6 +95,51 @@ class StandInUITestCase: XCTestCase {
         configuration.httpMaximumConnectionsPerHost = 1
         return URLSession(configuration: configuration)
     }()
+
+    // MARK: the precondition
+
+    /// Reaching the stand-in at all, before any call that means something.
+    ///
+    /// **It is a precondition and not a step of the experiment.** The two tier-2 tests run
+    /// the same sequence — reset, hold, launch, tap, wait, kill, release, relaunch, complete
+    /// — and are read against each other step for step, so this is here rather than at the
+    /// top of both: a third tier-2 test gets it without being able to forget it, and neither
+    /// body grows a step that is not part of what is being compared.
+    ///
+    /// **It asks a route that changes nothing.** `GET /_standin/uploads`, taking any 200 and
+    /// reading nothing out of the body: this is a question about reachability, not about
+    /// state. It is **not** a retry wrapper around `POST /_standin/reset`, which still gets
+    /// exactly its own `controlTries` afterwards, and a reset that then fails is a real
+    /// failure reported as one.
+    ///
+    /// **It does not paper over a stand-in that is down.** One that is down refuses at once;
+    /// refusals are recorded and asked again through `firstContactTries`, and at the bound
+    /// this fails with what it saw, naming reachability. The test then does not run, which is
+    /// the honest outcome and a more legible one than a control call that went unanswered
+    /// for reasons nothing recorded.
+    override func setUp() async throws {
+        try await super.setUp()
+        let base = try standInBaseURL()
+        let seen = Seen()
+        let deadline = Date().addingTimeInterval(Self.bound(Self.firstContactTries))
+        var questions = 0
+        while questions < Self.firstContactTries, Date() < deadline {
+            questions += 1
+            let asked = Date()
+            switch ask(request(base, "/_standin/uploads"), until: deadline, into: seen,
+                       accepting: { status, _ in status == 200 }) {
+            case .accepted:   return
+            case .rejected:   pace(from: asked, until: deadline)
+            case .unanswered: continue   // the deadline; the loop's own guard ends it
+            }
+        }
+        // Thrown and not also `XCTFail`ed: a precondition that fails should print one cause
+        // and one line, and a throwing `setUpWithError` skips the body, so the sentence has
+        // to travel *with* the error rather than beside it.
+        throw Untaken.unreachable(
+            "the stand-in never became reachable in \(Int(Self.bound(Self.firstContactTries))) s "
+            + "(\(questions) of \(Self.firstContactTries) questions); it answered \(seen.described)")
+    }
 
     // MARK: the waits
 
@@ -304,7 +368,26 @@ class StandInUITestCase: XCTestCase {
         return uploads.compactMap { $0["uploadId"] as? String }
     }
 
-    enum Untaken: Error { case noStandIn, waitRanOut }
+    /// `unreachable` is its own case and not `waitRanOut`: a process that never reached the
+    /// stand-in and a wait that reached its bound are the two failures this class exists to
+    /// stop conflating.
+    ///
+    /// It carries its own sentence because the precondition reports by throwing and by
+    /// nothing else. `description` is what a reader sees; the two older cases keep the
+    /// spelling they already print, so nothing about their existing output moves.
+    enum Untaken: Error, CustomStringConvertible {
+        case noStandIn
+        case waitRanOut
+        case unreachable(String)
+
+        var description: String {
+            switch self {
+            case .noStandIn:             "noStandIn"
+            case .waitRanOut:            "waitRanOut"
+            case .unreachable(let what): what
+            }
+        }
+    }
 }
 
 /// `GET /_standin/uploads/{id}`: what the authority received, how many times, and which
