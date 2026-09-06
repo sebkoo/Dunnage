@@ -7,8 +7,12 @@ import XCTest
 /// a bound are two bounds, and a wait that drifted between them would make the pair
 /// incomparable — which is the whole of what the control is for.
 ///
-/// **Every wait here is a bounded count of tries with a name and a failure message.** No
-/// wait in this file is an unconditional pause, a progress estimate or a clock reading: the
+/// **Every wait here is bounded, named, and says what it saw when its bound ran out.** A
+/// wait's bound is a deadline — `bound(tries)`, wall-clock — and `tries` is the number of
+/// questions that deadline is spelled as; the two now agree, where a count of loop
+/// iterations once read as a count of questions asked. No wait here is a progress estimate
+/// or a pause for progress: a wait ends the moment its answer arrives, the only clock any
+/// of them reads is its own deadline and the space it leaves between two questions, and the
 /// kill each test performs is sequenced on the stand-in's own report of what it received
 /// (spec §1.1).
 ///
@@ -47,53 +51,97 @@ class StandInUITestCase: XCTestCase {
 
     nonisolated static func bound(_ tries: Int) -> TimeInterval { Double(tries) * tryInterval }
 
+    // MARK: the session
+
+    /// The session every question here is asked over. Its own, and not `URLSession.shared`.
+    ///
+    /// A wait cannot state a property of networking it does not own, and `shared`'s defaults
+    /// have already had to be worked around once in this file: `request(_:_:)` sets a cache
+    /// policy per call because the shared cache must not answer for the stand-in. Each value
+    /// below has a reason, because a value with no reason is a guess.
+    ///
+    /// - `ephemeral`: nothing here is worth a disk cache or a cookie store, and an answer
+    ///   out of either is not an answer about what the stand-in holds now.
+    /// - `urlCache = nil`: what the per-request policy says once per call, said once here as
+    ///   a property of the session instead.
+    /// - `httpMaximumConnectionsPerHost = 1` **states the property `ask`'s cancel creates;
+    ///   it does not create it.** A try owns its request until it answers or is cancelled,
+    ///   so at most one is ever outstanding, and this line is that written down. It is not a
+    ///   guard: a loop that later stopped cancelling would quietly serialise its requests
+    ///   behind this limit rather than announce the change. **The invariant lives in `ask`,
+    ///   and whoever changes that loop has to come back here.**
+    nonisolated static let session: URLSession = {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.urlCache = nil
+        configuration.httpMaximumConnectionsPerHost = 1
+        return URLSession(configuration: configuration)
+    }()
+
     // MARK: the waits
 
     /// The upload the app opened with the stand-in. Exactly one, because the reset each
     /// test performs leaves the stand-in holding none and the test declares one.
     func uploadTheAppOpened(_ base: URL) throws -> String {
         let seen = Seen()
-        for _ in 0..<Self.openTries {
-            guard let data = ask(request(base, "/_standin/uploads"),
-                                 accepting: { status, data in
-                                     seen.record(status, data)
-                                     return status == 200 && Self.uploadIds(data).count == 1
-                                 }) else { continue }
-            return Self.uploadIds(data)[0]
+        let deadline = Date().addingTimeInterval(Self.bound(Self.openTries))
+        var questions = 0
+        while questions < Self.openTries, Date() < deadline {
+            questions += 1
+            let asked = Date()
+            switch ask(request(base, "/_standin/uploads"), until: deadline, into: seen,
+                       accepting: { status, data in
+                           status == 200 && Self.uploadIds(data).count == 1
+                       }) {
+            case .accepted(let data): return Self.uploadIds(data)[0]
+            case .rejected:           pace(from: asked, until: deadline)
+            case .unanswered:         continue   // the deadline; the loop's own guard ends it
+            }
         }
         XCTFail("the app did not open an upload with the stand-in within \(Int(Self.bound(Self.openTries))) s "
-              + "(\(Self.openTries) tries); the stand-in answered \(seen.described)")
+              + "(\(questions) of \(Self.openTries) questions); the stand-in answered \(seen.described)")
         throw Untaken.waitRanOut
     }
 
     func waitUntilPartThreeIsReceivedAndHeld(_ base: URL, _ upload: String) throws {
         let seen = Seen()
-        for _ in 0..<Self.heldTries {
-            let answered = ask(request(base, "/_standin/uploads/\(upload)"),
-                               accepting: { status, data in
-                                   seen.record(status, data)
-                                   guard status == 200, let map = Receipts(data) else { return false }
-                                   return map.puts["3"] == 1 && map.held.contains(3)
-                               })
-            if answered != nil { return }
+        let deadline = Date().addingTimeInterval(Self.bound(Self.heldTries))
+        var questions = 0
+        while questions < Self.heldTries, Date() < deadline {
+            questions += 1
+            let asked = Date()
+            switch ask(request(base, "/_standin/uploads/\(upload)"), until: deadline, into: seen,
+                       accepting: { status, data in
+                           guard status == 200, let map = Receipts(data) else { return false }
+                           return map.puts["3"] == 1 && map.held.contains(3)
+                       }) {
+            case .accepted:   return
+            case .rejected:   pace(from: asked, until: deadline)
+            case .unanswered: continue   // the deadline; the loop's own guard ends it
+            }
         }
         XCTFail("part 3 was not received and held within \(Int(Self.bound(Self.heldTries))) s "
-              + "(\(Self.heldTries) tries); the stand-in answered \(seen.described)")
+              + "(\(questions) of \(Self.heldTries) questions); the stand-in answered \(seen.described)")
         throw Untaken.waitRanOut
     }
 
     func receiptMap(_ base: URL, _ upload: String) throws -> Receipts {
         let seen = Seen()
-        for _ in 0..<Self.controlTries {
-            guard let data = ask(request(base, "/_standin/uploads/\(upload)"),
-                                 accepting: { status, data in
-                                     seen.record(status, data)
-                                     return status == 200
-                                 }) else { continue }
-            if let map = Receipts(data) { return map }
+        let deadline = Date().addingTimeInterval(Self.bound(Self.controlTries))
+        var questions = 0
+        while questions < Self.controlTries, Date() < deadline {
+            questions += 1
+            let asked = Date()
+            switch ask(request(base, "/_standin/uploads/\(upload)"), until: deadline, into: seen,
+                       accepting: { status, _ in status == 200 }) {
+            case .accepted(let data):
+                if let map = Receipts(data) { return map }
+                pace(from: asked, until: deadline)
+            case .rejected:   pace(from: asked, until: deadline)
+            case .unanswered: continue   // the deadline; the loop's own guard ends it
+            }
         }
         XCTFail("the stand-in did not report its receipts within \(Int(Self.bound(Self.controlTries))) s "
-              + "(\(Self.controlTries) tries); the stand-in answered \(seen.described)")
+              + "(\(questions) of \(Self.controlTries) questions); the stand-in answered \(seen.described)")
         throw Untaken.waitRanOut
     }
 
@@ -126,35 +174,108 @@ class StandInUITestCase: XCTestCase {
         post.httpBody = try? JSONSerialization.data(withJSONObject: body)
         post.setValue("application/json", forHTTPHeaderField: "Content-Type")
         let seen = Seen()
-        for _ in 0..<Self.controlTries {
-            if let data = ask(post, accepting: { status, data in
-                seen.record(status, data)
-                return status == 200
-            }) { return data }
+        let deadline = Date().addingTimeInterval(Self.bound(Self.controlTries))
+        var questions = 0
+        while questions < Self.controlTries, Date() < deadline {
+            questions += 1
+            let asked = Date()
+            switch ask(post, until: deadline, into: seen,
+                       accepting: { status, _ in status == 200 }) {
+            case .accepted(let data): return data
+            case .rejected:           pace(from: asked, until: deadline)
+            case .unanswered:         continue   // the deadline; the loop's own guard ends it
+            }
         }
         XCTFail("POST \(path) was not answered within \(Int(Self.bound(Self.controlTries))) s "
-              + "(\(Self.controlTries) tries); the stand-in answered \(seen.described)")
+              + "(\(questions) of \(Self.controlTries) questions); the stand-in answered \(seen.described)")
         return nil
     }
 
-    /// One try. The request is issued and its answer awaited; the try ends when an answer
-    /// arrives that `accepting` takes, and otherwise when `tryInterval` runs out. Nothing
-    /// here pauses: the wait ends on an event or on the try's own bound, and the caller's
-    /// count is what bounds the whole wait.
+    /// What one try came back with.
+    enum Answer {
+        /// An answer arrived and the wait's condition took it.
+        case accepted(Data)
+        /// An answer arrived and the condition said no. The question is spent; the wait may
+        /// ask another.
+        case rejected
+        /// The wait's deadline passed with nothing back, and the request was cancelled.
+        case unanswered
+    }
+
+    /// One try: one question, and its answer.
+    ///
+    /// The request is issued once and owned until it answers — a response *or* an error,
+    /// and either is recorded — or until `deadline`, at which point it is cancelled so that
+    /// nothing this try started is left running for the tries after it.
+    ///
+    /// **The cancel is what makes a wait's count mean what it says.** A try that walked away
+    /// from its request at a bound of its own left it running, and the next try started
+    /// another beside it. A stand-in answering a little later than that bound was then
+    /// accepted by no try while answering every one of them, and the abandoned requests
+    /// piled up behind the session's per-host limit until most tries were never attempts at
+    /// all — a wait of twenty questions asking four. Both halves of that are gone: a
+    /// request is owned to its answer, and `Self.session` states the one-at-a-time property
+    /// this ownership creates.
     func ask(_ request: URLRequest,
-             accepting accept: @escaping @Sendable (Int, Data) -> Bool) -> Data? {
+             until deadline: Date,
+             into seen: Seen,
+             accepting accept: @escaping @Sendable (Int, Data) -> Bool) -> Answer {
         let answered = XCTestExpectation(description: "the stand-in answered \(request.url?.path ?? "")")
         let taken = Taken()
-        URLSession.shared.dataTask(with: request) { data, response, _ in
-            guard let http = response as? HTTPURLResponse, let data else { return }
+        let task = Self.session.dataTask(with: request) { data, response, error in
+            // Fulfilled on every outcome, not only an acceptable one: the wait has to be
+            // able to tell an answer it did not like from no answer at all, and it cannot
+            // do that if only the answers it liked wake it.
+            //
+            // **Deferred, and the ordering is the invariant.** The fulfill runs after
+            // `taken.data` has been written, so the waiter cannot wake between the
+            // condition accepting an answer and that answer being there to return. An
+            // explicit fulfill moved any earlier lets the waiter read `taken.data` as nil
+            // and report `.rejected` for an answer the condition took — this function's own
+            // defect wearing another face. **Whoever un-defers this has to put the write
+            // first.**
+            defer { answered.fulfill() }
+            if let error {
+                // Our own cancel is not the stand-in refusing. It is this question reaching
+                // the deadline, and `ranOut` has already counted it.
+                let code = (error as NSError).code
+                if code != NSURLErrorCancelled { seen.refused(error.localizedDescription) }
+                return
+            }
+            guard let http = response as? HTTPURLResponse, let data else {
+                seen.refused("an answer that was not an HTTP response")
+                return
+            }
+            seen.answered(http.statusCode, data)
             guard accept(http.statusCode, data) else { return }
             taken.data = data
-            answered.fulfill()
-        }.resume()
-        guard XCTWaiter().wait(for: [answered], timeout: Self.tryInterval) == .completed else {
-            return nil
         }
-        return taken.data
+        task.resume()
+
+        let remaining = deadline.timeIntervalSinceNow
+        guard remaining > 0,
+              XCTWaiter().wait(for: [answered], timeout: remaining) == .completed else {
+            task.cancel()
+            seen.ranOut()
+            return .unanswered
+        }
+        if let data = taken.data { return .accepted(data) }
+        return .rejected
+    }
+
+    /// The space between one question and the next.
+    ///
+    /// A stand-in that answers "not yet" in a millisecond would otherwise be asked as fast
+    /// as the loop runs, and a wait spelled as sixty questions would be over in sixty
+    /// milliseconds. This is a rate on questions and never a wait for progress: it delays
+    /// no answer the wait would have taken — an acceptable one returns from `ask` the moment
+    /// it arrives — and it never runs past the wait's own deadline.
+    func pace(from asked: Date, until deadline: Date) {
+        let next = min(asked.addingTimeInterval(Self.tryInterval), deadline)
+        let remaining = next.timeIntervalSinceNow
+        guard remaining > 0 else { return }
+        _ = XCTWaiter().wait(for: [XCTestExpectation(description: "between two questions")],
+                             timeout: remaining)
     }
 
     // MARK: the screen
@@ -211,26 +332,31 @@ struct Receipts {
     }
 }
 
-/// What a wait was told, for the message it prints when its count runs out.
+/// What a wait was told, for the message it prints when its bound runs out.
 ///
-/// A wait that names only what was absent cannot tell a stand-in answering
-/// `puts [1: 1, 2: 1]` with part 3 missing from a stand-in answering nothing at all, and
-/// those are different failures with different causes. Every answer is recorded, including
-/// the ones the wait's own condition rejected — those are the interesting ones, and `ask`
-/// drops them.
+/// A wait that names only what was absent cannot tell three different failures apart, and
+/// this repository has now been bitten by two of them: a stand-in that answered and whose
+/// answer did not satisfy the condition, a stand-in the transport could not reach at all,
+/// and a stand-in slower than the wait was willing to be. Every outcome is recorded —
+/// including the answers the wait's own condition rejected, which are the interesting ones,
+/// and including the errors, which `ask` used to discard.
 ///
 /// The lock is the checking, which is why the conformance is unchecked, and it is the same
-/// lock `Taken` carries for the same reason: `accepting` runs on the session's queue. An
-/// answer arriving just after its try's bound is recorded late and may reach the message.
-/// That is what "the last answer seen" means, and it is not something the message can be
-/// wrong about.
+/// lock `Taken` carries for the same reason: the handler runs on the session's queue. An
+/// answer arriving just after the deadline is recorded late and may reach the message. That
+/// is what "the last answer seen" means, and it is not something the message can be wrong
+/// about.
 final class Seen: @unchecked Sendable {
     private let lock = NSLock()
     private var status: Int?
     private var body: Data?
     private var answers = 0
+    private var refusals = 0
+    private var lastRefusal: String?
+    private var deadlined = 0
 
-    func record(_ status: Int, _ body: Data) {
+    /// An HTTP answer arrived, whatever the wait's condition then made of it.
+    func answered(_ status: Int, _ body: Data) {
         lock.withLock {
             self.status = status
             self.body = body
@@ -238,14 +364,35 @@ final class Seen: @unchecked Sendable {
         }
     }
 
-    /// Always printable. A wait that saw nothing says so, rather than printing an empty map
-    /// that would read like an answer.
+    /// The transport answered instead of the stand-in. Never our own cancel, which is a
+    /// question reaching the deadline and is counted as one.
+    func refused(_ what: String) {
+        lock.withLock {
+            self.refusals += 1
+            self.lastRefusal = what
+        }
+    }
+
+    /// A question reached the wait's deadline with nothing back, and was cancelled.
+    func ranOut() {
+        lock.withLock { self.deadlined += 1 }
+    }
+
+    /// Always printable, and it names which of the three happened. A wait that saw nothing
+    /// says so rather than printing an empty map, which would read like an answer.
     var described: String {
         lock.withLock {
-            guard let status, let body else { return "nothing at all" }
-            let text = Receipts(body)?.described
-                ?? String(decoding: body.prefix(200), as: UTF8.self)
-            return "\(answers) time(s), the last status \(status): \(text)"
+            if let status, let body {
+                let text = Receipts(body)?.described
+                    ?? String(decoding: body.prefix(200), as: UTF8.self)
+                let line = "\(answers) time(s), the last status \(status): \(text)"
+                guard refusals > 0 || deadlined > 0 else { return line }
+                return line + " (\(refusals) refused, \(deadlined) unanswered)"
+            }
+            if refusals > 0 {
+                return "nothing usable: \(refusals) refused, the last \(lastRefusal ?? "for no stated reason")"
+            }
+            return "nothing at all: \(deadlined) question(s) reached the deadline with no answer"
         }
     }
 }
