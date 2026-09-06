@@ -9,13 +9,8 @@ Durable, resumable background uploads for iOS.
 
 A successful HTTP request is not the same thing as a durable upload.
 
-**Status:** Core, the durable ledger, the driver, the control plane, the transport and
-the app — intent model, total transition table, append-only event log with a
-file-backed implementation, the transport boundary with an in-memory double, the driver
-that executes Core's effects behind an injected clock, a CDK stack with four handlers
-that synthesise with no cloud credentials, and a transport that owns a background
-URLSession and speaks the plane's four routes against a stand-in. Nothing is deployed,
-and no byte has reached S3.
+**Status:** Core, the ledger, the driver, the control plane, the transport and the app
+have landed. Nothing is deployed, and no byte has reached S3.
 
 Three mechanisms this library keeps apart, because none of them implies the others:
 
@@ -28,40 +23,46 @@ S3 multipart             set-shaped: which part numbers the authority holds, whi
                          not a resumable byte offset
 ```
 
-Core does not know whether confirmed progress is a contiguous byte offset or a set of
-confirmed units. That meaning belongs to the transport contract, which is why the type is
-a sum type rather than a number.
+Which of the three a transport speaks is the transport's to state and never Core's to
+infer. The boundary is two declarations:
+
+```swift
+public enum ConfirmedProgress: Hashable, Sendable {
+    case chunks(Set<ChunkID>)
+    case offset(ByteOffset)
+}
+
+public protocol UploadTransport: Sendable {
+    func openSession(for intent: UploadIntent) async throws -> TransportSessionID
+    func send(_ transfer: PlannedTransfer,
+              of intent: UploadIntent,
+              in session: TransportSessionID) async throws -> TransferOutcome
+    func confirmedProgress(for upload: UploadID,
+                           in session: TransportSessionID) async throws -> Confirmation
+    func finalize(_ session: TransportSessionID) async throws
+}
+```
 
 That boundary, and what "confirmed" means on each side of it, is
-[ADR-0001](docs/adr/0001-transport-boundary-and-confirmed-progress.md). The other
-decisions are in [docs/adr/](docs/adr/).
+[ADR-0001](docs/adr/0001-transport-boundary-and-confirmed-progress.md). The other decisions
+are in [docs/adr/](docs/adr/), and the named test behind every claim below is in
+[`docs/invariants.md`](docs/invariants.md).
 
 ## Bird's-eye view
 
-Where this package sits in the whole system. This package, the transport and the app
-exist; the control plane exists as code only; and the data plane is named so that its
-absence is legible.
+Where this package sits in the whole system. A box is drawn around what is built and a
+dashed rule around what is named and not, and the status column says what built has
+reached: `landed` is invariants that exist and are checked, `code only` is code that
+nothing has deployed. The data plane is named so that its absence is legible.
 
 ```
                             iOS device
-   ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─
-     App                                         phase 5   landed
-       choose a file, watch it finish
-   ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─
-     Transport                                   phase 5   landed
-       owns the background URLSession, speaks the plane's four routes
-       against a stand-in here, the deployed plane and S3 in 4b
-   ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─
    ┌────────────────────────────────────────────────────────────────┐
+   │  App                                        phase 5   landed   │
+   │  Transport                                  phase 5   landed   │
+   │    owns the background URLSession                              │
    │  DunnageDriver                              phase 3   landed   │
-   │    executes Core's effects, records what a transport           │
-   │    answered, concludes nothing, and waits behind its own clock │
-   └────────────────────────────────────────────────────────────────┘
-   ┌────────────────────────────────────────────────────────────────┐
    │  DunnageLedger                              phase 2   landed   │
-   │    the append-only event log, on a file                        │
-   └────────────────────────────────────────────────────────────────┘
-   ┌────────────────────────────────────────────────────────────────┐
    │  DunnageCore — pure                         phase 1   landed   │
    │    intent · chunk plan · confirmed progress as a sum type      │
    │    total transition table · resume plan · retry policy         │
@@ -99,18 +100,17 @@ No percentages. A named invariant either exists or it does not.
 
 | Phase | What it proves | Status |
 |---|---|---|
-| **1. Core** | A chunk the transport authority has confirmed is never re-sent, under an identity and payload contract Core does not interpret, and no two ways of not being confirmed are treated as one. | landed — 40 named tests |
-| **2. Durable ledger** | The log outlives the process that wrote it: replaying it from disk reproduces state exactly, and a file that is not a log says so rather than deriving one. ADR-0001 O-1 was the open question here; ADR-0004 decides it. | landed — 21 named tests |
-| **3. Driver** | The driver executes Core's effects and records what a transport answered, and concludes nothing of its own: a transfer it stopped waiting for is not a refusal, the attempt tally is not the driver's to keep, and an upload is given up on because Core asked for it. | landed — 22 named tests |
+| **1. Core** | A chunk the authority has confirmed is never re-sent, and two ways of not being confirmed are never one. | landed — 40 named tests |
+| **2. Durable ledger** | Replaying the log from disk reproduces the state its writer held, and a file that is not a log says so. | landed — 21 named tests |
+| **3. Driver** | It executes Core's effects and concludes nothing of its own — not a refusal, not the tally, not giving up. | landed — 22 named tests |
 | **4a. Control plane** | The half of phase 4 a reader can check with no AWS account: a stack that synthesises without one, and a control plane that decides where a caller's bytes may land from the token it verified rather than from anything the caller sent. | landed — 23 named tests, vitest on a second runner |
 | **4b. Transport and data plane** | The same transport, against the real plane and S3: the bucket exists, ADR-0006 §4's six assumptions and ADR-0007's three are checked by a recorded contract run, and O-10's recovery is decided. | not started |
-| **5. App** | The bound survives the process: a transfer outlives the driver that started it, and a relaunched process resumes from the log alone and re-sends nothing the authority confirmed. CI's evidence is a real kill of a process on the simulator; suspension, jetsam and force-quit on a device are the harness's to record, never CI's. | landed — 46 named tests, two app bundles on a simulator |
+| **5. App** | A transfer outlives the driver that started it, and a relaunched process resumes from the log alone. CI's evidence is a real kill on the simulator. | landed — 46 named tests, two app bundles on a simulator |
 
 ## Phase 1: Core — a chunk the authority has confirmed is never re-sent
 
-`swift test` runs all of them, with no AWS access key, no SSO session and no
-cloud configuration of any kind. The named tests behind them are in
-[`docs/invariants.md`](docs/invariants.md).
+`swift test` runs all of them, with no AWS access key, no SSO session and no cloud
+configuration of any kind.
 
 - A chunk names a fixed span, and an authority's answer is read against that span
 - A confirmation is evidence about the upload and the operation it names, and nothing else
@@ -125,7 +125,7 @@ cloud configuration of any kind. The named tests behind them are in
 ## Phase 2: Durable ledger — the log outlives the process that wrote it
 
 The second implementation of `UploadEventLog`, on a file. The protocol did not change to
-suit it. The named tests are in [`docs/invariants.md`](docs/invariants.md).
+suit it.
 
 - Every event has one written form on disk, and reading it back gives the event that was written
 - A record naming an event this binary does not know is never guessed at
@@ -136,11 +136,9 @@ suit it. The named tests are in [`docs/invariants.md`](docs/invariants.md).
 
 ## Phase 3: Driver — it executes Core's effects and concludes nothing of its own
 
-The driver: it executes Core's effects, records what a transport answered, and concludes
-nothing of its own. Every test here runs against a scripted double and a clock that moves
-only when a test moves it — no network, no real time. See
-[ADR-0005](docs/adr/0005-the-driver-and-the-clock-it-waits-behind.md) for what that does and
-does not establish. The named tests are in [`docs/invariants.md`](docs/invariants.md).
+Every test runs against a scripted double and a clock that moves only when a test moves it —
+no network, no real time. See
+[ADR-0005](docs/adr/0005-the-driver-and-the-clock-it-waits-behind.md).
 
 - A transport's answer becomes one event, on the log, before the next transfer begins
 - The wait a send has earned is honoured before the transfer, by the driver's own clock
@@ -152,10 +150,8 @@ does not establish. The named tests are in [`docs/invariants.md`](docs/invariant
 
 ## Phase 4a: Control plane — it decides where a caller's bytes may land from the token it verified
 
-The control plane, and the half of phase 4 a reader can check with no AWS account. Nothing
-here is deployed: every test reaches a pure function, an assertion about a synthesised
-template, or the path a handler takes before it constructs a client — and no test in this
-phase is evidence about any AWS account. See
+Nothing here is deployed: every test reaches a pure function, an assertion about a
+synthesised template, or the path a handler takes before it constructs a client. See
 [ADR-0006](docs/adr/0006-the-control-plane-and-the-identity-it-composes.md).
 
 - The stack synthesises with no account, no region and no credential, and nothing it does can quietly acquire one
@@ -179,15 +175,9 @@ the build has written one; `--no-lookups` is the flag CI passes, and it guards a
 
 ## Phase 5: App — the transfer outlives the process that started it
 
-The app, and the transport it owns: a background `URLSession` speaking the control plane's
-four routes, against a stand-in here, the deployed plane and S3 in 4b. Three tiers, by
-name — deterministic (`swift test` and the app's unit-test bundle: virtual clock, no
-session, no socket), simulator evidence (one named test on the CI image, which kills the
-process mid-transfer and reads the relaunch from outside), and the device harness (a
-numbered procedure on a real iPhone, recorded and never a CI claim). See
-[ADR-0007](docs/adr/0007-the-transfer-that-outlives-the-process-and-the-stand-in-it-is-measured-against.md)
-for what each tier does and does not establish. The named tests are in
-[`docs/invariants.md`](docs/invariants.md).
+Three tiers, and only the first two are CI's: deterministic tests, one simulator test that
+kills the process mid-transfer, and a device harness that is recorded and never a CI claim.
+See [ADR-0007](docs/adr/0007-the-transfer-that-outlives-the-process-and-the-stand-in-it-is-measured-against.md).
 
 - A background task names one chunk of one upload, and a task this transport did not name is never read as progress
 - A chunk has at most one transfer in flight, and a send for a chunk already in flight waits on it rather than starting another
