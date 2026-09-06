@@ -183,7 +183,7 @@ implements the transport contract, not a vendor's product.* An `UploadTransport`
 stands in for a boundary this repository declared and can therefore specify. An `S3Client`
 double would stand in for AWS.
 
-**What would falsify that in 4b.** The handlers written in this phase assume four things
+**What would falsify that in 4b.** The handlers written in this phase assume six things
 about S3 that nothing in this phase checks. Each is checked by 4b's contract run against a
 real bucket, and that run is recorded before anything trusts `S3UploadTransport`.
 
@@ -343,6 +343,8 @@ row in the transition table, and a decision about what confirmed progress from a
 operation means. ADR-0001 §2 refused that decision until there was a demonstrated need. This
 is the need; the transport that meets it is 4b's.
 
+*Decided by ADR-0009.*
+
 ### 8. What this stack may not later do
 
 Claim 1 — *the stack synthesises with no account, no region and no credential, and nothing
@@ -438,7 +440,7 @@ what it replaced; a spec is owed the same.
   test and by a comment at each of two call sites in two languages. A reviewer is the
   mechanism. That is the price of composing the identity at all, and what it buys out of is a
   `ListMultipartUploads` scan on the hot path of every resume.
-- **4a's suite establishes nothing about S3.** §4's four assumptions are unchecked until 4b
+- **4a's suite establishes nothing about S3.** §4's six assumptions are unchecked until 4b
   runs against a real bucket. A green 4a is a statement about a synthesised template and
   about pure functions, and about nothing else.
 - **Two ways to become unable to move, and no way to say so.** §3's unparseable identity and
@@ -475,6 +477,7 @@ answers turn out to be.
   Bounded by §7 and not prevented. Preventing it is the demonstrated need that reopens O-2.
 - **No recovery from an operation the authority no longer has.** ADR-0005 O-10 stands. §7
   gives its exposure a size; it does not close it.
+  *Decided by ADR-0009.*
 
 ## Open questions
 

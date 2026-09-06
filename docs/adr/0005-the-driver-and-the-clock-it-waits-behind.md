@@ -216,6 +216,10 @@ would be a claim the transport never made. So the driver appends nothing, stops 
 and lets the error out to its caller. The log is unchanged, which means a later run replays
 to exactly the state the failed one started from and asks again.
 
+**ADR-0009 §4 scopes the paragraph above to every thrown error but two.**
+`TransportError.unknownSession` and `.unrecognisedSession` are answers about the operation,
+and each becomes one `transportSessionLost`. Every other thrown error still becomes no event.
+
 A `send` that throws also stops the transfers queued behind it in the same round. Doing
 less work is always safe here: the plan is re-derived from the authority's next answer, so
 a transfer not attempted is a transfer the next round attempts.
@@ -261,8 +265,12 @@ aborted.
 It costs storage at the authority, not correctness: the orphan holds parts nobody will
 complete, and the thesis is untouched, because no confirmed chunk is re-sent — the second
 operation simply has nothing confirmed in it. Closing it means writing an intent to open
-before opening, which is a new event, a new row in the transition table, and a decision
-about what a recorded intent with no session means. Not today.
+before opening, which is a new event, a new row in the transition table, and a decision about
+what a recorded intent with no session means. Not today. **There is a second way to orphan an
+operation, added by ADR-0009 §5:** an operation the authority has forgotten is replaced rather
+than aborted, because nothing in this design aborts one, and its parts cost storage until the
+bucket's lifecycle rule reaches them. Same cost, same bound, and no correctness claim touched
+by either.
 
 ### O-9. An upload that is only ever interrupted never terminates
 
@@ -277,6 +285,13 @@ that Core would have to own, or a connectivity signal that says waiting is point
 three are decisions, none of them is the driver's, and none is needed by anything today.
 
 ### O-10. An authority that has forgotten the operation leaves the upload stuck
+
+**Decided by ADR-0009.** The paragraphs below record why it was left open, and the condition
+they name has since been met: ADR-0001 §2 refused to decide what replacing an operation means
+until there was a demonstrated need, and there are now two — this question, given a size and a
+schedule by ADR-0006 §7, and the identity ADR-0007 §8 added. An operation the authority no
+longer has is replaced, the replacement inherits neither the confirmation nor the tally, and
+the upload is neither failed nor stuck.
 
 `confirmedProgress` throws `TransportError.unknownSession` when the multipart upload has
 been aborted or has expired. Under §8 the driver appends nothing and stops, so every later

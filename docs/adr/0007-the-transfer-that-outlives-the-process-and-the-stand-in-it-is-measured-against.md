@@ -285,7 +285,7 @@ the four stand-in routes through one adapter, and the answers are asserted equal
 diff, so a double that grew more lenient than the plane reds by name.
 
 Three things the stand-in does are assumptions about S3 that nothing in phase 5 checks.
-Each is UNVERIFIED here, each is 4b's contract run's, beside the four falsifiers ADR-0006
+Each is UNVERIFIED here, each is 4b's contract run's, beside the six falsifiers ADR-0006
 §4 already assigned there, and a green stand-in test says the stand-in behaves as assumed
 and nothing about S3.
 
@@ -346,6 +346,7 @@ in `DunnageTransport` — the same isolation as 4a's control under `test/`. It i
 - **Two ways to be unable to move remain.** ADR-0006's unparseable identity, now
   `.unrecognisedSession`, and its expired operation both still end in an upload that is not
   failed and cannot proceed. O-10's recovery is not decided here.
+  *Decided by ADR-0009 §4: both are now a replacement, and neither strands an upload.*
 - **A double stands where S3 will.** Every green in this phase that touches the stand-in's
   data plane is a statement about §9's three assumptions, not about S3.
 
