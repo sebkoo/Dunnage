@@ -52,37 +52,48 @@ class StandInUITestCase: XCTestCase {
     /// The upload the app opened with the stand-in. Exactly one, because the reset each
     /// test performs leaves the stand-in holding none and the test declares one.
     func uploadTheAppOpened(_ base: URL) throws -> String {
+        let seen = Seen()
         for _ in 0..<Self.openTries {
             guard let data = ask(request(base, "/_standin/uploads"),
                                  accepting: { status, data in
-                                     status == 200 && Self.uploadIds(data).count == 1
+                                     seen.record(status, data)
+                                     return status == 200 && Self.uploadIds(data).count == 1
                                  }) else { continue }
             return Self.uploadIds(data)[0]
         }
-        XCTFail("the app did not open an upload with the stand-in within \(Int(Self.bound(Self.openTries))) s")
+        XCTFail("the app did not open an upload with the stand-in within \(Int(Self.bound(Self.openTries))) s "
+              + "(\(Self.openTries) tries); the stand-in answered \(seen.described)")
         throw Untaken.waitRanOut
     }
 
     func waitUntilPartThreeIsReceivedAndHeld(_ base: URL, _ upload: String) throws {
+        let seen = Seen()
         for _ in 0..<Self.heldTries {
             let answered = ask(request(base, "/_standin/uploads/\(upload)"),
                                accepting: { status, data in
+                                   seen.record(status, data)
                                    guard status == 200, let map = Receipts(data) else { return false }
                                    return map.puts["3"] == 1 && map.held.contains(3)
                                })
             if answered != nil { return }
         }
-        XCTFail("part 3 was not received and held within \(Int(Self.bound(Self.heldTries))) s")
+        XCTFail("part 3 was not received and held within \(Int(Self.bound(Self.heldTries))) s "
+              + "(\(Self.heldTries) tries); the stand-in answered \(seen.described)")
         throw Untaken.waitRanOut
     }
 
     func receiptMap(_ base: URL, _ upload: String) throws -> Receipts {
+        let seen = Seen()
         for _ in 0..<Self.controlTries {
             guard let data = ask(request(base, "/_standin/uploads/\(upload)"),
-                                 accepting: { status, _ in status == 200 }) else { continue }
+                                 accepting: { status, data in
+                                     seen.record(status, data)
+                                     return status == 200
+                                 }) else { continue }
             if let map = Receipts(data) { return map }
         }
-        XCTFail("the stand-in did not report its receipts within \(Int(Self.bound(Self.controlTries))) s")
+        XCTFail("the stand-in did not report its receipts within \(Int(Self.bound(Self.controlTries))) s "
+              + "(\(Self.controlTries) tries); the stand-in answered \(seen.described)")
         throw Untaken.waitRanOut
     }
 
@@ -105,14 +116,24 @@ class StandInUITestCase: XCTestCase {
         return request
     }
 
+    /// The one wait here that answers with `nil` rather than throwing, because its callers
+    /// assert on the answer. That is an implementation difference and not a licence to be
+    /// mute: it reports what it last saw on the way out, exactly as the three above do, and
+    /// the caller's own assertion still says which call it was.
     func control(_ base: URL, _ path: String, _ body: [String: Any]) -> Data? {
         var post = request(base, path)
         post.httpMethod = "POST"
         post.httpBody = try? JSONSerialization.data(withJSONObject: body)
         post.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let seen = Seen()
         for _ in 0..<Self.controlTries {
-            if let data = ask(post, accepting: { status, _ in status == 200 }) { return data }
+            if let data = ask(post, accepting: { status, data in
+                seen.record(status, data)
+                return status == 200
+            }) { return data }
         }
+        XCTFail("POST \(path) was not answered within \(Int(Self.bound(Self.controlTries))) s "
+              + "(\(Self.controlTries) tries); the stand-in answered \(seen.described)")
         return nil
     }
 
@@ -179,6 +200,53 @@ struct Receipts {
         self.puts = puts
         self.completes = completes
         self.held = json["held"] as? [Int] ?? []
+    }
+
+    /// One line, in a fixed order. A map has no order of its own and a failure message read
+    /// against another failure message needs one, for the reason the ledger's written form
+    /// sorts a set before writing it.
+    var described: String {
+        let counts = puts.sorted { $0.key < $1.key }.map { "\($0.key): \($0.value)" }
+        return "puts [\(counts.joined(separator: ", "))], completes \(completes), held \(held.sorted())"
+    }
+}
+
+/// What a wait was told, for the message it prints when its count runs out.
+///
+/// A wait that names only what was absent cannot tell a stand-in answering
+/// `puts [1: 1, 2: 1]` with part 3 missing from a stand-in answering nothing at all, and
+/// those are different failures with different causes. Every answer is recorded, including
+/// the ones the wait's own condition rejected — those are the interesting ones, and `ask`
+/// drops them.
+///
+/// The lock is the checking, which is why the conformance is unchecked, and it is the same
+/// lock `Taken` carries for the same reason: `accepting` runs on the session's queue. An
+/// answer arriving just after its try's bound is recorded late and may reach the message.
+/// That is what "the last answer seen" means, and it is not something the message can be
+/// wrong about.
+final class Seen: @unchecked Sendable {
+    private let lock = NSLock()
+    private var status: Int?
+    private var body: Data?
+    private var answers = 0
+
+    func record(_ status: Int, _ body: Data) {
+        lock.withLock {
+            self.status = status
+            self.body = body
+            self.answers += 1
+        }
+    }
+
+    /// Always printable. A wait that saw nothing says so, rather than printing an empty map
+    /// that would read like an answer.
+    var described: String {
+        lock.withLock {
+            guard let status, let body else { return "nothing at all" }
+            let text = Receipts(body)?.described
+                ?? String(decoding: body.prefix(200), as: UTF8.self)
+            return "\(answers) time(s), the last status \(status): \(text)"
+        }
     }
 }
 
