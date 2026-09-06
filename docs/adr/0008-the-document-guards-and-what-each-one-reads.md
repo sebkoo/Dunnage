@@ -13,7 +13,10 @@ only in the commit messages that built them.
 `## Phase N: ` is the contract and everything after the colon is prose, so the anchor
 matches the prefix and stops. An anchor over the whole heading makes the wording
 load-bearing: rewording one side empties that extraction silently, and two empty
-lists diff clean. The count check turns that into a failure, not a silent pass.
+lists diff clean. The count check turns that into a failure, not a silent pass. The
+list names every phase the document has, because a phase missing from it is that same
+silent pass one level up: nothing is extracted, so no two lists can disagree, and a
+claim reworded in one file clears every other check here.
 
 ### 2. The name guard reconciles one document against every runner's list
 
