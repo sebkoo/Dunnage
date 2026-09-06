@@ -467,6 +467,53 @@ Today's real backstop is the workflow's, and until that commit `ci.yml` set
 -default-test-execution-time-allowance` to the app job's `xcodebuild test` step, which is
 the one place a hang can be made to red naming the test rather than cancelling a job.
 
+### O-19. Nothing says how long a background transfer may take to reach the authority
+
+The contradiction is between two numbers already in the tree, and it needs no observation at
+all. `URLSessionPartTasks.partTransferLifetime` is `.seconds(900)` and the background
+configuration sets `timeoutIntervalForResource` to it, so this app's own configuration
+declares that one part transfer may take a quarter of an hour. The tier-2 wait
+`waitUntilPartThreeIsReceivedAndHeld` declares failure at 15 s — `heldTries` 60 against a
+`tryInterval` of 0.25 s. The harness gives a transfer a sixtieth of the time the thing it
+waits on is configured to take, and `heldTries`' own comment gives that number a purpose —
+the kill is sequenced on it — and no justification. **The bound is not merely unjustified:
+it contradicts the configuration of the thing it waits on.**
+
+`isDiscretionary` being false is the only other statement this repository makes about
+scheduling, and §6's comment on it says exactly what it buys: *a discretionary transfer is
+one the system may defer past the life of the URL it carries*. That bounds deferral against
+a URL's life. It does not say a transfer starts promptly, and nothing here says what
+promptly would be.
+
+**UNVERIFIED:** whether a background `URLSession` transfer reaches the authority inside any
+fixed bound — on a just-booted simulator, or on a device.
+
+**One occurrence, and its cause is not established.** A CI run of the tier-2 control test
+had `waitUntilPartThreeIsReceivedAndHeld` reach 15 s with part 3 not held. That is an
+occurrence and it is **not evidence for this question**: the harness of the day abandoned
+each request at a quarter-second and recorded nothing of what came back, so sixty receipt
+queries every one of which was answered a little late would have looked exactly the same.
+The commits *let a wait that runs out say what it was told* and *let a try own the question
+it asked* removed both halves of that. Nothing about the earlier run can be recovered, and
+it is named here so that it is not counted twice — once as the reason to open this question,
+and again as an answer to it.
+
+**What would answer it.** The next time that wait runs out it reports the stand-in's last
+answer and its counts. `answered N time(s) … puts [1: 1, 2: 1] … held []` — part 3 absent
+from a stand-in that was answering — is a transfer the system deferred, and this question is
+then real. `nothing at all` or `nothing usable` is a harness or reachability finding and
+belongs elsewhere. Until one of those lines exists, no bound here is known to be correct and
+none is raised on speculation: raising it would trade a bound that has a purpose for one
+that has a hope.
+
+**What cannot answer it.** Not CI: every job runs on one runner class whose own setup steps
+have varied fivefold between runs of this repository, so a green says a bound held once and
+never that it holds. Not the recorded run of a deployed plane: that asks S3 nine questions
+about multipart uploads, and this is a question about when the system chooses to start a
+transfer, which no answer from S3 touches. The shape that could answer it is the device
+harness's — a numbered procedure that starts a transfer and records when the authority first
+sees it — and `docs/device-harness.md` does not ask that today.
+
 ## Observed on a device
 
 Nothing yet. `docs/device-harness.md` says what is recorded here and how.
