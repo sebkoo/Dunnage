@@ -40,8 +40,9 @@ final class DuplicateConfirmationTests: XCTestCase {
     private func isDuplicable(_ event: UploadEvent) -> Bool {
         switch event.kind {
         case .authorityReported, .chunkTransferReported:            true
-        case .declared, .transportSessionOpened, .chunkTransferRefused,
-             .chunkTransferInterrupted, .finalized, .abandoned:     false
+        case .declared, .transportSessionOpened, .transportSessionLost,
+             .chunkTransferRefused, .chunkTransferInterrupted,
+             .finalized, .abandoned:                                false
         }
     }
 

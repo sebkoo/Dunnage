@@ -24,6 +24,10 @@ public enum RejectionReason: Hashable, Sendable {
     /// The confirmation names a different transport operation. Units are scoped to the
     /// operation that stated them, so this is not evidence about the open one.
     case confirmationFromAnotherTransportSession
+    /// The loss names a different transport operation. A loss is evidence about the
+    /// operation it names and about nothing else, so this one says nothing about the open
+    /// operation — and a stale loss replayed off the log does not close it.
+    case lossNamesAnotherTransportSession
     /// The phase is terminal. No event leaves it.
     case terminalPhaseIsAbsorbing
     /// The event names a chunk this upload never planned. It is not evidence about this
@@ -86,6 +90,7 @@ public enum UploadTransition {
                              [.openTransportSession(intent)])
 
         case (.undeclared, .transportSessionOpened),
+             (.undeclared, .transportSessionLost),
              (.undeclared, .chunkTransferReported),
              (.undeclared, .chunkTransferRefused),
              (.undeclared, .chunkTransferInterrupted),
@@ -107,7 +112,8 @@ public enum UploadTransition {
                               confirmed: nil, attempts: Attempts()),
                 [.askAuthorityForConfirmedProgress(intent.upload, session)])
 
-        case (.declared, .chunkTransferReported),
+        case (.declared, .transportSessionLost),
+             (.declared, .chunkTransferReported),
              (.declared, .chunkTransferRefused),
              (.declared, .chunkTransferInterrupted),
              (.declared, .authorityReported),
@@ -125,6 +131,29 @@ public enum UploadTransition {
 
         case (.transferring, .transportSessionOpened):
             return .rejected(.transportSessionAlreadyOpen)
+
+        // ---- an operation the authority no longer has ----
+        //
+        // One case for both live phases, because they are one decision (ADR-0009 §2). The
+        // upload goes back to `.declared`: the intent is on record and no transport
+        // operation is open, which is exactly what `.declared` already means, and
+        // `(.declared, .transportSessionOpened)` does the rest — it enters `.transferring`
+        // with `confirmed: nil` and asks the authority before anything is sent.
+        //
+        // `.declared(intent:)` carries neither a confirmation nor a tally, so choosing it
+        // as this row's target and dropping both are one decision and not two. Part 3 of a
+        // dead operation and part 3 of its replacement are unrelated facts, and a refusal
+        // collected against an operation that no longer exists may have been caused by its
+        // not existing. Carrying the tally across would need a new phase, not another row.
+        //
+        // The guard is the same discipline `admit` applies to a confirmation: a loss is
+        // evidence about the operation it names, so one naming another changes nothing.
+        case (.transferring(let intent, let session, _, _), .transportSessionLost(let id)),
+             (.finalizing(let intent, let session, _, _), .transportSessionLost(let id)):
+            guard id == session else {
+                return .rejected(.lossNamesAnotherTransportSession)
+            }
+            return .accepted(.declared(intent: intent), [.openTransportSession(intent)])
 
         case (.transferring(let intent, let session, _, _), .chunkTransferReported):
             // The state is returned untouched. A transport's report is an observation;

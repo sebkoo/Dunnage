@@ -41,6 +41,22 @@ public enum UploadEvent: Hashable, Sendable {
     /// A transport operation was opened for this upload.
     case transportSessionOpened(TransportSessionID)
 
+    /// The authority no longer has this transport operation.
+    ///
+    /// A fourth kind of thing, and none of the three the alphabet already had. Not a
+    /// `TransferOutcome`: it says nothing about a chunk, and no chunk event is written for
+    /// it. Not an interruption: no transfer was attempted, so nothing about a chunk reaches
+    /// the log at all. Never an abandonment: giving up is Core's conclusion against a budget
+    /// derived from the log, and this is not giving up — the upload continues, in another
+    /// operation. The alphabet did not have one because until now an operation was opened
+    /// and never lost.
+    ///
+    /// It carries the identity it is about, for the reason `Confirmation` carries one. A
+    /// loss is evidence about the operation it names and about nothing else, and a stale
+    /// loss replayed off the log must not drop an operation opened after it.
+    /// See docs/adr/0009-replacing-a-transport-operation-the-authority-no-longer-has.md.
+    case transportSessionLost(TransportSessionID)
+
     /// A transport said a chunk's transfer finished.
     ///
     /// This is an observation, not a confirmation. The chunk id is recorded because the log
@@ -84,6 +100,7 @@ public enum UploadEvent: Hashable, Sendable {
 public enum UploadEventKind: String, CaseIterable, Hashable, Sendable {
     case declared
     case transportSessionOpened
+    case transportSessionLost
     case chunkTransferReported
     case chunkTransferRefused
     case chunkTransferInterrupted
@@ -97,6 +114,7 @@ extension UploadEvent {
         switch self {
         case .declared:               .declared
         case .transportSessionOpened: .transportSessionOpened
+        case .transportSessionLost:   .transportSessionLost
         case .chunkTransferReported:  .chunkTransferReported
         case .chunkTransferRefused:   .chunkTransferRefused
         case .chunkTransferInterrupted: .chunkTransferInterrupted

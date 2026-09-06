@@ -33,7 +33,8 @@ final class LedgerFormatTests: XCTestCase {
          .authorityReported(Confirmation(upload: upload, session: session,
                                          progress: .offset(ByteOffset(16)))),
          .finalized,
-         .abandoned(.retriesExhausted)]
+         .abandoned(.retriesExhausted),
+         .transportSessionLost(session)]
     }
 
     func testEveryEventKindHasOneWrittenFormAndSurvivesTheRoundTrip() throws {
@@ -54,6 +55,36 @@ final class LedgerFormatTests: XCTestCase {
             let written = try LedgerFormat.encode(.abandoned(reason))
             XCTAssertEqual(try LedgerFormat.decode(written), .abandoned(reason),
                            "the class of failure did not survive the round trip")
+        }
+    }
+
+    /// ADR-0009 §1 and §6. A loss carries the identity it is about, and the version does not
+    /// move for it: a new tag is what `RecordFault.unknownToken` exists for.
+    func testALossIsWrittenToTheLedgerAndReadBackAsTheEventThatWasWritten() throws {
+        let loss = UploadEvent.transportSessionLost(session)
+
+        XCTAssertEqual(String(decoding: try LedgerFormat.encode(loss), as: UTF8.self),
+                       #"{"event":"transportSessionLost","session":"s"}"#,
+                       "the written form is a decision, and the identity it is about is part of it")
+        XCTAssertEqual(LedgerFormat.version, 2,
+                       "a new tag is not a new shape for the records that already exist")
+        XCTAssertEqual(try LedgerFormat.decode(try LedgerFormat.encode(loss)), loss,
+                       "reading a loss back gave a different event")
+
+        let refusable: [(String, RecordFault, String)] = [
+            ("a field this binary does not have",
+             .unknownToken(field: "transportSessionLost", token: "reason"),
+             #"{"event":"transportSessionLost","reason":"retriesExhausted","session":"s"}"#),
+            ("the identity missing altogether",
+             .malformed(detail: "transportSessionLost.session is a string"),
+             #"{"event":"transportSessionLost"}"#),
+        ]
+        for (what, expected, payload) in refusable {
+            XCTAssertThrowsError(try LedgerFormat.decode(Array(payload.utf8)),
+                                 "\(what): was read rather than refused") { error in
+                XCTAssertEqual(error as? RecordFault, expected,
+                               "\(what): refused without saying what it could not read")
+            }
         }
     }
 

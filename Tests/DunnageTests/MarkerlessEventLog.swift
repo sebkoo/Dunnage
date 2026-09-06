@@ -95,6 +95,8 @@ actor MarkerlessEventLog: UploadEventLog {
                     "\(intent.plan.chunkSize)", "\(intent.plan.totalBytes)"].joined(separator: " ")
         case .transportSessionOpened(let session):
             return "transportSessionOpened \(session.rawValue)"
+        case .transportSessionLost(let session):
+            return "transportSessionLost \(session.rawValue)"
         case .chunkTransferReported(let chunk):
             return "chunkTransferReported \(chunk.ordinal)"
         case .chunkTransferRefused(let chunk):
@@ -148,6 +150,10 @@ actor MarkerlessEventLog: UploadEventLog {
         case "transportSessionOpened":
             guard token.count == 2 else { throw fail() }
             return .transportSessionOpened(TransportSessionID(token[1]))
+
+        case "transportSessionLost":
+            guard token.count == 2 else { throw fail() }
+            return .transportSessionLost(TransportSessionID(token[1]))
 
         case "chunkTransferReported":   return .chunkTransferReported(try chunk(token))
         case "chunkTransferRefused":    return .chunkTransferRefused(try chunk(token))

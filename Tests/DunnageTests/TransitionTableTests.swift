@@ -24,6 +24,7 @@ final class TransitionTableTests: XCTestCase {
         switch kind {
         case .declared:               .declared(intent)
         case .transportSessionOpened: .transportSessionOpened(session)
+        case .transportSessionLost:   .transportSessionLost(session)
         case .chunkTransferReported:  .chunkTransferReported(ChunkID(1))
         case .chunkTransferRefused:   .chunkTransferRefused(ChunkID(1))
         case .chunkTransferInterrupted: .chunkTransferInterrupted(ChunkID(1))
@@ -74,6 +75,7 @@ final class TransitionTableTests: XCTestCase {
         .undeclared: [
             .declared:               .accepted(.declared),
             .transportSessionOpened: .rejected(.uploadNotDeclared),
+            .transportSessionLost:   .rejected(.uploadNotDeclared),
             .chunkTransferReported:  .rejected(.uploadNotDeclared),
             .chunkTransferRefused:   .rejected(.uploadNotDeclared),
             .chunkTransferInterrupted: .rejected(.uploadNotDeclared),
@@ -84,6 +86,7 @@ final class TransitionTableTests: XCTestCase {
         .declared: [
             .declared:               .rejected(.uploadAlreadyDeclared),
             .transportSessionOpened: .accepted(.transferring),
+            .transportSessionLost:   .rejected(.noTransportSession),
             .chunkTransferReported:  .rejected(.noTransportSession),
             .chunkTransferRefused:   .rejected(.noTransportSession),
             .chunkTransferInterrupted: .rejected(.noTransportSession),
@@ -94,6 +97,7 @@ final class TransitionTableTests: XCTestCase {
         .transferring: [
             .declared:               .rejected(.uploadAlreadyDeclared),
             .transportSessionOpened: .rejected(.transportSessionAlreadyOpen),
+            .transportSessionLost:   .accepted(.declared),
             .chunkTransferReported:  .accepted(.transferring),
             .chunkTransferRefused:   .accepted(.transferring),   // representative is in the plan
             .chunkTransferInterrupted: .accepted(.transferring),
@@ -104,6 +108,7 @@ final class TransitionTableTests: XCTestCase {
         .finalizing: [
             .declared:               .rejected(.uploadAlreadyDeclared),
             .transportSessionOpened: .rejected(.transportSessionAlreadyOpen),
+            .transportSessionLost:   .accepted(.declared),
             .chunkTransferReported:  .rejected(.allChunksAlreadyConfirmed),
             .chunkTransferRefused:   .rejected(.allChunksAlreadyConfirmed),
             .chunkTransferInterrupted: .rejected(.allChunksAlreadyConfirmed),
@@ -114,6 +119,7 @@ final class TransitionTableTests: XCTestCase {
         .completed: [
             .declared:               .rejected(.terminalPhaseIsAbsorbing),
             .transportSessionOpened: .rejected(.terminalPhaseIsAbsorbing),
+            .transportSessionLost:   .rejected(.terminalPhaseIsAbsorbing),
             .chunkTransferReported:  .rejected(.terminalPhaseIsAbsorbing),
             .chunkTransferRefused:   .rejected(.terminalPhaseIsAbsorbing),
             .chunkTransferInterrupted: .rejected(.terminalPhaseIsAbsorbing),
@@ -124,6 +130,7 @@ final class TransitionTableTests: XCTestCase {
         .failed: [
             .declared:               .rejected(.terminalPhaseIsAbsorbing),
             .transportSessionOpened: .rejected(.terminalPhaseIsAbsorbing),
+            .transportSessionLost:   .rejected(.terminalPhaseIsAbsorbing),
             .chunkTransferReported:  .rejected(.terminalPhaseIsAbsorbing),
             .chunkTransferRefused:   .rejected(.terminalPhaseIsAbsorbing),
             .chunkTransferInterrupted: .rejected(.terminalPhaseIsAbsorbing),

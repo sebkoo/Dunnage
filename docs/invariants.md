@@ -532,6 +532,34 @@ object, the control has been broken and `create` has nothing left to be measured
 - `testAClientTrustedKeyPutsTwoCallersOnOneObject`
 - `testTheDerivedKeyAfterTheSameTwoRequestsKeepsTheCallersApart`
 
+## Phase 4b: Transport and data plane — a replacement inherits nothing, and the tree names no account
+
+O-10's recovery is decided in Core and in the driver, and it needs no cloud: a new event, four
+rows, and one written form on disk. What a deployed plane and S3 answer is a recorded run,
+written into an ADR and never into CI. See
+[ADR-0009](adr/0009-replacing-a-transport-operation-the-authority-no-longer-has.md).
+
+### An operation the authority no longer has is replaced, and the replacement inherits nothing the operation it replaces was told
+
+`.declared` carries neither a confirmation nor a tally, so choosing it as the loss row's target
+and dropping both are one decision rather than two. Part 3 of a dead operation and part 3 of
+its replacement are unrelated facts; and a refusal collected against an operation that no
+longer exists may have been caused by its not existing, so carrying it forward would punish
+the new operation for the old one's death. Everything the dead operation held is sent again,
+and the thesis holds because its bound is per operation under the transport's stated contract.
+
+- `testAnOperationTheAuthorityNoLongerHasIsReplaced`
+- `testAReplacementInheritsNeitherTheConfirmationNorTheTallyOfTheOperationItReplaces`
+- `testALossIsWrittenToTheLedgerAndReadBackAsTheEventThatWasWritten`
+
+### A loss is evidence about the operation it names, and one naming another operation changes nothing
+
+The same discipline a confirmation is held to, and for the same reason: evidence is about the
+operation it names and about nothing else. A stale loss replayed off the log must not drop an
+operation opened after it.
+
+- `testALossNamingAnotherTransportOperationChangesNothing`
+
 ## Phase 5: App — the transfer outlives the process that started it
 
 The app, and the transport it owns. See

@@ -173,6 +173,15 @@ The build comes first because `cloud/cdk.json` is `{"app": "node dist/app.js"}` 
 the build has written one; `--no-lookups` is the flag CI passes, and it guards against a
 `fromLookup` arriving later rather than doing anything today.
 
+## Phase 4b: Transport and data plane — a replacement inherits nothing, and the tree names no account
+
+O-10's recovery, decided in Core and in the driver and needing no cloud. What a deployed plane
+and S3 answer is one recorded run, written into an ADR and never into CI. See
+[ADR-0009](docs/adr/0009-replacing-a-transport-operation-the-authority-no-longer-has.md).
+
+- An operation the authority no longer has is replaced, and the replacement inherits nothing the operation it replaces was told
+- A loss is evidence about the operation it names, and one naming another operation changes nothing
+
 ## Phase 5: App — the transfer outlives the process that started it
 
 Three tiers, and only the first two are CI's: deterministic tests, one simulator test that

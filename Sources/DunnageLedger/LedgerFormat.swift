@@ -50,6 +50,10 @@ public enum LedgerFormat {
             try only(["event", "session"], in: record, of: tag)
             return .transportSessionOpened(TransportSessionID(try string(record, "session", of: tag)))
 
+        case "transportSessionLost":
+            try only(["event", "session"], in: record, of: tag)
+            return .transportSessionLost(TransportSessionID(try string(record, "session", of: tag)))
+
         case "chunkTransferReported":
             try only(["chunk", "event"], in: record, of: tag)
             return .chunkTransferReported(try chunk(record, of: tag))
@@ -89,6 +93,8 @@ public enum LedgerFormat {
             ["event": "declared", "intent": written(intent)]
         case .transportSessionOpened(let session):
             ["event": "transportSessionOpened", "session": session.rawValue]
+        case .transportSessionLost(let session):
+            ["event": "transportSessionLost", "session": session.rawValue]
         case .chunkTransferReported(let chunk):
             ["event": "chunkTransferReported", "chunk": chunk.ordinal]
         case .chunkTransferRefused(let chunk):
