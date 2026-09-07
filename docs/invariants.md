@@ -574,6 +574,18 @@ about a chunk. The two tests are the boundary's two sides; neither alone locates
 - `testADriverGivenAnAuthorityThatForgotTheOperationRecordsTheLossAndOpensAnother`
 - `testADriverGivenATransportErrorThatIsNotTheAuthorityForgettingAppendsNothing`
 
+### The failure mode a replacement that believes a dead operation's confirmation reintroduces, kept working on purpose
+
+A variant of the loss row that carries `confirmed` across into the replacement, and differs in
+nothing else — every other pair is delegated to `UploadTransition.apply` verbatim, so the
+contrast is attributable to the carry and not to a second fault. It is never "fixed": if the
+replacement ever schedules the whole plan again, the control has been broken and the thesis has
+lost the thing it is measured against.
+
+- `testACredulousReplacementKeepsEveryOtherRuleTheRealOneKeeps`
+- `testACredulousReplacementSchedulesNothingForPartsTheNewAuthorityDoesNotHold`
+- `testTheRealReplacementSchedulesEveryChunkAgain`
+
 ## Phase 5: App — the transfer outlives the process that started it
 
 The app, and the transport it owns. See
