@@ -100,12 +100,12 @@ No percentages. A named invariant either exists or it does not.
 
 | Phase | What it proves | Status |
 |---|---|---|
-| **1. Core** | A chunk the authority has confirmed is never re-sent, and two ways of not being confirmed are never one. | landed — 40 named tests |
+| **1. Core** | A chunk the authority has confirmed is never re-sent, and two ways of not being confirmed are never one. | landed — 41 named tests |
 | **2. Durable ledger** | Replaying the log from disk reproduces the state its writer held, and a file that is not a log says so. | landed — 21 named tests |
 | **3. Driver** | It executes Core's effects and concludes nothing of its own — not a refusal, not the tally, not giving up. | landed — 22 named tests |
 | **4a. Control plane** | The half of phase 4 a reader can check with no AWS account: a stack that synthesises without one, and a control plane that decides where a caller's bytes may land from the token it verified rather than from anything the caller sent. | landed — 23 named tests, vitest on a second runner |
-| **4b. Transport and data plane** | The same transport, against the real plane and S3: the bucket exists, ADR-0006 §4's six assumptions and ADR-0007's three are checked by a recorded contract run, and O-10's recovery is decided. | not started |
-| **5. App** | A transfer outlives the driver that started it, and a relaunched process resumes from the log alone. CI's evidence is a real kill on the simulator. | landed — 46 named tests, two app bundles on a simulator |
+| **4b. Transport and data plane** | The same transport, against the real plane and S3: the bucket exists, ADR-0006 §4's six assumptions and ADR-0007's three are checked by a recorded contract run, and O-10's recovery is decided. | in progress — 8 named tests: O-10's recovery, decided in Core and the driver. The negative control, a tree that names no account, the gated contract run and the recorded run are not built |
+| **5. App** | A transfer outlives the driver that started it, and a relaunched process resumes from the log alone. CI's evidence is a real kill on the simulator. | landed — 47 named tests, two app bundles on a simulator |
 
 ## Phase 1: Core — a chunk the authority has confirmed is never re-sent
 
