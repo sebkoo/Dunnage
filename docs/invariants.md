@@ -697,17 +697,18 @@ dropped as not this transport's, leaving a send waiting on an answer that had be
 and every later send adopting a dead entry — ordering removes that rather than a rule about
 what to do afterwards (ADR-0007 §4). Confirmed progress comes from `GET
 /uploads/{ref}/parts` and from nothing else, whatever any completion said (ADR-0001 §3);
-the answer is set-shaped because the authority's is, a part number below one or one that is
-not an integer is refused rather than filtered away, and reading past the one page `parts.ts`
-serves is ADR-0006 O-20 and undecided. `finalize` names one refusal: a complete over parts
-the authority does not hold, which the plane today cannot make — it does not know the plan's
-N and completes over whatever `ListParts` returns — so the stand-in's 400 is what the case is
+the answer is set-shaped because the authority's is, a part number below one or one that
+is not an integer is refused rather than filtered away, and reading past the one page
+`parts.ts` serves is ADR-0006 O-20 and undecided. `finalize` names one refusal: a complete
+over parts the authority does not hold, which the plane today cannot make — it does not
+know the plan's N and completes over whatever `ListParts` returns, and whether it should
+keep the count it is handed is ADR-0006 O-22 — so the stand-in's 400 is what the case is
 written against, and Core finalizes only once every chunk is confirmed, which leaves the
 authority having lost a part between the ask and the complete. The last two tests are the
-ones that could not be written before: the driver one is the sentence ADR-0005 §5 could not
-make, a transfer that outlives the wait the driver gave it and is answered by the next send
-without a second task, and the listener one is the only test here that goes through the
-session rather than calling the listener's `deliver` directly, so the wiring `adopt()`
+ones that could not be written before: the driver one is the sentence ADR-0005 §5 could
+not make, a transfer that outlives the wait the driver gave it and is answered by the next
+send without a second task, and the listener one is the only test here that goes through
+the session rather than calling the listener's `deliver` directly, so the wiring `adopt()`
 starts is covered rather than assumed. With all four calls on the actor,
 `BackgroundSessionTransport` declares its `UploadTransport` conformance.
 

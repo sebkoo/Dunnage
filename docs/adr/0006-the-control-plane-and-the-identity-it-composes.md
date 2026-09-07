@@ -538,3 +538,36 @@ is decided here, and no observation decides it.
 Until it is, the refusal stays loud and the sites that deferred to "4b" name this
 question instead — a pointer at a phase expires when the phase closes, and a pointer at
 a question does not.
+
+### O-22. The plane completes over what `ListParts` returns, and cannot know it is whole
+
+`complete.ts` hands `CompleteMultipartUpload` the parts `ListParts` gave it. It does not
+know the plan's N, so it cannot tell a whole set from a short one, and it makes no refusal
+for a short one. The stand-in does: it answers `{"error":"incomplete upload"}`, the
+transport turns that into `TransportError.incompleteUpload`, and `ControlPlaneWire` names
+the case. **Only the stand-in can produce it.** A refusal the transport has a case for,
+that the thing it speaks to cannot make, is a case tested against a double and nothing
+else.
+
+**Why this may be the weightiest of the three.** `complete.ts` already carries the
+argument in its own words about a truncated page: it *"would not be a short answer, it
+would be data loss"*, because `CompleteMultipartUpload` assembles the object out of
+exactly the parts it is handed and discards the rest. A plane that does not know N cannot
+tell a short set from a whole one — so whether that same sentence reaches a complete over
+a set that is short for any other reason is the question. **This ADR does not assert that
+it does.** Settling it is what the question is for.
+
+**What bounds it today, and what does not.** Core finalizes only once every chunk is
+confirmed, so under Core's own discipline the set handed over is whole. That is a property
+of one caller, not of the route: it does not survive a caller that is not this Core, and
+it does not cover the authority losing a part between the ask and the complete — which is
+exactly the case `TransportError.incompleteUpload` was named for.
+
+**What would settle it is a decision, not an observation.** The route is already told N.
+`POST /uploads` carries `{ref, parts}` and `create.ts` reads only `ref`; `POST
+/uploads/{ref}/urls` carries it again, and `urls.ts` validates it as a count and signs
+that many URLs. The plane is told twice and keeps it neither time, so the question is not
+whether to tell it but whether to keep it — and keeping it across requests is a store. §5
+enumerated what the control plane must answer, found one row that would need one, and
+closed O-2 anyway. This is a second row of that shape, and why the question lives here
+rather than in a phase.

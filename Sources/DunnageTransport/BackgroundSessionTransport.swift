@@ -265,7 +265,8 @@ public actor BackgroundSessionTransport {
     /// One refusal is named. `TransportError.incompleteUpload` is a complete over parts the
     /// authority does not hold — the stand-in's 400 (spec §3.2) — and not a malformed
     /// request, which stays the route's own refusal. The plane today cannot make that
-    /// refusal: `complete.ts` does not know the plan's N and completes over whatever
+    /// refusal, and whether it should be able to is ADR-0006 O-22 and undecided:
+    /// `complete.ts` does not know the plan's N and completes over whatever
     /// `ListParts` returns. Core finalizes only once every chunk is confirmed, so the case
     /// this names is the authority having lost a part between the ask and the complete.
     public func finalize(_ session: TransportSessionID) async throws {

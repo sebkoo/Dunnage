@@ -50,7 +50,8 @@ import { type Handler, event, respond } from './support'
 //     whether a failing client may be supplied, not an observation.
 //  3. The 400 with `{"error":"incomplete upload"}` on complete. The plane cannot make that
 //     refusal: it does not know the plan's N and completes over whatever `ListParts`
-//     returns. Excluded for the same reason, and 4b's is the decision.
+//     returns. Excluded for the same reason, and whether it should keep the count it is
+//     handed is ADR-0006 O-22 and undecided.
 //
 // Measured against the plane and not against a restated expectation, as the negative
 // control is: the assertion is that the two answers are the same answer, so a change to a
