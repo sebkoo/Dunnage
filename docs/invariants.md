@@ -75,6 +75,7 @@ because the double's contract grew when the transport's signatures did (ADR-0007
 a double whose contract is not tested is one the suite trusts on faith.
 
 - `testTransportDoubleIssuesDistinctSessionsAndRefusesUnknownOnes`
+- `testTheTransportDoublesErrorKnobAnswersOneQuestionAndThenStopsAnswering`
 - `testTransportDoubleReportsSetShapedProgressIncludingGaps`
 - `testTransportDoubleReportsOffsetShapedProgressAsAContiguousPrefixOnly`
 - `testTransportDoubleScriptedToRefuseAnswersNoAndStoresNothing`
@@ -551,6 +552,8 @@ and the thesis holds because its bound is per operation under the transport's st
 - `testAnOperationTheAuthorityNoLongerHasIsReplaced`
 - `testAReplacementInheritsNeitherTheConfirmationNorTheTallyOfTheOperationItReplaces`
 - `testALossIsWrittenToTheLedgerAndReadBackAsTheEventThatWasWritten`
+- `testFinalizingAgainstAnOperationTheAuthorityForgotIsALossAndNotAFailure`
+- `testTheTransportReadsAForgottenOperationAsUnknownWhenItFinalizesToo`
 
 ### A loss is evidence about the operation it names, and one naming another operation changes nothing
 
@@ -559,6 +562,16 @@ operation it names and about nothing else. A stale loss replayed off the log mus
 operation opened after it.
 
 - `testALossNamingAnotherTransportOperationChangesNothing`
+
+### A transport error that is not the authority forgetting still reaches the log as nothing
+
+ADR-0005 §8 stands everywhere the supersession does not reach: a thrown error becomes no event,
+the round stops, and a later run replays to the state this one started from. Exactly two errors
+are excepted, and they are excepted because they are answers about the operation rather than
+about a chunk. The two tests are the boundary's two sides; neither alone locates a boundary.
+
+- `testADriverGivenAnAuthorityThatForgotTheOperationRecordsTheLossAndOpensAnother`
+- `testADriverGivenATransportErrorThatIsNotTheAuthorityForgettingAppendsNothing`
 
 ## Phase 5: App — the transfer outlives the process that started it
 

@@ -511,3 +511,115 @@ final class DriverAbandonmentTests: XCTestCase {
         XCTAssertEqual(state, .completed(intent: intent))
     }
 }
+
+/// ADR-0009 §4. Two thrown errors become one event; every other error still becomes none.
+///
+/// The double is told which `TransportError` to throw from the next question and never why.
+/// That is also all the driver consumes — it maps an error, and never learns a cause — so a
+/// test that staged a cause would be testing something the code cannot see.
+final class DriverSessionLossTests: XCTestCase {
+
+    private let policy = RetryPolicy(maxAttemptsPerChunk: 3,
+                                     initialBackoff: .milliseconds(500),
+                                     maximumBackoff: .seconds(4))
+
+    // chunks 1...3, four bytes each
+    private var intent: UploadIntent {
+        UploadIntent(upload: UploadID("upload-a"),
+                     destination: DestinationRef("destination-a"),
+                     payload: PayloadRef("payload-a"),
+                     plan: ChunkPlan(totalBytes: 12, chunkSize: 4),
+                     policy: policy)
+    }
+
+    private func driver(_ transport: InMemoryTransportDouble,
+                        _ log: InMemoryEventLog) -> UploadDriver {
+        UploadDriver(transport: transport, log: log, clock: VirtualClock(),
+                     quietAfter: neverReached)
+    }
+
+    /// Both errors ADR-0009 §4 names, each becoming exactly one loss naming the operation it
+    /// was thrown about, and the fold asking for a replacement.
+    ///
+    /// The double forgets once and then behaves — the knob is spent by the question that
+    /// throws it — so O-18's loop is visible in the shape of the test rather than hit by it.
+    /// An authority that forgot every operation would never terminate here, and that is the
+    /// open question and not a defect in this test.
+    func testADriverGivenAnAuthorityThatForgotTheOperationRecordsTheLossAndOpensAnother() async throws {
+        for thrown in [TransportError.unknownSession, .unrecognisedSession] {
+            let transport = InMemoryTransportDouble(shape: .setShaped)
+            await transport.nextQuestionThrows(thrown)
+            let log = InMemoryEventLog()
+
+            // The round leaving by a throw is the failure this test is about, so it is
+            // caught and reported here: an error escaping would end the method and the
+            // second case would never run.
+            let state: UploadMachineState
+            do {
+                state = try await driver(transport, log).run(intent)
+            } catch {
+                XCTFail("\(thrown): the round stopped and left the error — \(error)")
+                continue
+            }
+
+            let written = try await log.records(for: intent.upload).map(\.event)
+            XCTAssertEqual(Array(written.prefix(4)), [
+                .declared(intent),
+                .transportSessionOpened(TransportSessionID("session-1")),
+                .transportSessionLost(TransportSessionID("session-1")),
+                .transportSessionOpened(TransportSessionID("session-2")),
+            ], "\(thrown): the loss is on the log, naming the operation, before the replacement opens")
+            XCTAssertEqual(state, .completed(intent: intent),
+                           "\(thrown): the upload continues in the replacement rather than failing")
+        }
+    }
+
+    /// ADR-0005 §8, unchanged everywhere the supersession does not reach. The whole log is
+    /// asserted, because "reaches the log as nothing" is a claim about what is not there.
+    func testADriverGivenATransportErrorThatIsNotTheAuthorityForgettingAppendsNothing() async throws {
+        let transport = InMemoryTransportDouble(shape: .setShaped)
+        await transport.nextQuestionThrows(.incompleteUpload)
+        let log = InMemoryEventLog()
+
+        do {
+            _ = try await driver(transport, log).run(intent)
+            XCTFail("an error this driver does not map still leaves the round")
+        } catch let error as TransportError {
+            XCTAssertEqual(error, .incompleteUpload, "the error the transport threw, unchanged")
+        }
+
+        let written = try await log.records(for: intent.upload).map(\.event)
+        XCTAssertEqual(written, [
+            .declared(intent),
+            .transportSessionOpened(TransportSessionID("session-1")),
+        ], "an error that is not the authority forgetting reaches the log as nothing")
+    }
+
+    /// The loss discovered by the call that creates the object rather than by the one that
+    /// asks what is held. A cold start onto a finalizing upload makes `finalize` the first
+    /// question `outstandingWork` produces, and the operation it names was never opened on
+    /// this transport — so the double answers from its own guard and no knob is set.
+    func testFinalizingAgainstAnOperationTheAuthorityForgotIsALossAndNotAFailure() async throws {
+        let dead = TransportSessionID("session-before-the-process-died")
+        let transport = InMemoryTransportDouble(shape: .setShaped)
+        let log = InMemoryEventLog()
+        _ = try await log.append(
+            [.declared(intent),
+             .transportSessionOpened(dead),
+             .authorityReported(Confirmation(upload: intent.upload, session: dead,
+                                             progress: .chunks(Set(intent.plan.chunks))))],
+            for: intent.upload)
+
+        let state = try await driver(transport, log).resume(intent.upload)
+
+        let written = try await log.records(for: intent.upload).map(\.event)
+        XCTAssertEqual(Array(written.dropFirst(3).prefix(2)), [
+            .transportSessionLost(dead),
+            .transportSessionOpened(TransportSessionID("session-1")),
+        ], "a finalize against an operation the authority forgot is a loss, and a replacement")
+        XCTAssertNotEqual(state.phase, .failed,
+                          "the upload is not failed; it continues in another operation")
+        XCTAssertEqual(state, .completed(intent: intent),
+                       "and it gets there: the replacement is asked, sent and finalized")
+    }
+}

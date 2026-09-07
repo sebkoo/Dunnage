@@ -275,6 +275,11 @@ public actor BackgroundSessionTransport {
             try ControlPlaneWire.completed(from: answer)
         } catch ControlPlaneError.incompleteUpload {
             throw TransportError.incompleteUpload
+        } catch ControlPlaneError.noSuchUpload {
+            // The reading `confirmedProgress` already has, at the other call: an operation
+            // the authority has no record of reads the same way whichever call discovers
+            // it (ADR-0009 §4). Still provisional, and for the same reason as there.
+            throw TransportError.unknownSession
         }
     }
 

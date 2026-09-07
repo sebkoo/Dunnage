@@ -32,6 +32,41 @@ final class TransportContractTests: XCTestCase {
         }
     }
 
+    /// The error knob owes a contract too: it answers the next question and no more.
+    ///
+    /// It exists because some errors have no cause this double can stage —
+    /// `.unrecognisedSession` is raised inside `SessionIdentity.parse` for an ill-formed
+    /// identity, and every id this double mints is well formed — so the instrument says what
+    /// the transport answers and never why. A question is `confirmedProgress` or `finalize`;
+    /// `send` is keyed by chunk and scripted by `Behavior`.
+    func testTheTransportDoublesErrorKnobAnswersOneQuestionAndThenStopsAnswering() async throws {
+        let transport = InMemoryTransportDouble(shape: .setShaped)
+        let session = try await transport.openSession(for: intent)
+
+        for question in ["confirmedProgress", "finalize"] {
+            await transport.nextQuestionThrows(.unrecognisedSession)
+            do {
+                switch question {
+                case "confirmedProgress":
+                    _ = try await transport.confirmedProgress(for: intent.upload, in: session)
+                default:
+                    try await transport.finalize(session)
+                }
+                XCTFail("\(question): the knob was set and the question did not throw")
+            } catch let error as TransportError {
+                XCTAssertEqual(error, .unrecognisedSession,
+                               "\(question): the knob threw something other than what it was given")
+            }
+        }
+
+        // Spent. What the double answers next is its own behaviour, not the knob's.
+        do {
+            _ = try await transport.confirmedProgress(for: intent.upload, in: session)
+        } catch {
+            XCTFail("the knob answered a second question: \(error)")
+        }
+    }
+
     /// A set-shaped authority holds what it holds. Sending 1, 2 and 4 leaves a gap at 3,
     /// and the authority says so rather than smoothing it into a frontier.
     func testTransportDoubleReportsSetShapedProgressIncludingGaps() async throws {

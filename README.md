@@ -181,6 +181,7 @@ and S3 answer is one recorded run, written into an ADR and never into CI. See
 
 - An operation the authority no longer has is replaced, and the replacement inherits nothing the operation it replaces was told
 - A loss is evidence about the operation it names, and one naming another operation changes nothing
+- A transport error that is not the authority forgetting still reaches the log as nothing
 
 ## Phase 5: App — the transfer outlives the process that started it
 

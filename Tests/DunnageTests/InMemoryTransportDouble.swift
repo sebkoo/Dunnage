@@ -76,6 +76,8 @@ actor InMemoryTransportDouble: UploadTransport {
     private var nextSession = 1
     private var behaviors: [ChunkID: Behavior] = [:]
     private var defaultBehavior: Behavior = .succeed
+    /// Set by `nextQuestionThrows(_:)`, spent by the next question, then nil again.
+    private var questionError: TransportError?
 
     /// Behaviours queued for a chunk's next sends, ahead of whatever it is scripted to do
     /// standingly. A transport that answers differently on the second try is the ordinary
@@ -117,6 +119,26 @@ actor InMemoryTransportDouble: UploadTransport {
 
     /// The authority loses all record of the operation, as an aborted multipart upload does.
     func forget(_ session: TransportSessionID) { sessions[session] = nil }
+
+    /// Throw this from the next question, and answer normally after it.
+    ///
+    /// An **error** instrument, not a scenario one, and the distinction is the reason it
+    /// exists. `forget(_:)` above stages a cause — the authority losing an operation — and
+    /// the error follows from it. Some errors have no cause a double can stage:
+    /// `.unrecognisedSession` is raised inside `SessionIdentity.parse` for an ill-formed
+    /// identity, before any authority is consulted, and this double has no identity format,
+    /// so every id it mints is well formed and none of them could ever produce it. A knob
+    /// that pretended otherwise would have the double claim never to have minted an id its
+    /// own `calls` records as `.opened`, and a fake that disagrees with the protocol makes
+    /// every test standing on it worthless.
+    ///
+    /// So this says only what the transport answers, never why. That is also all the driver
+    /// consumes: it maps an error, and never learns a cause.
+    ///
+    /// A *question* is `confirmedProgress` or `finalize` — the two calls that ask the
+    /// authority what is true. Not `send`, which is keyed by chunk and scripted by
+    /// `Behavior`.
+    func nextQuestionThrows(_ error: TransportError) { questionError = error }
 
     func isFinalized(_ session: TransportSessionID) -> Bool {
         sessions[session]?.finalized ?? false
@@ -179,6 +201,7 @@ actor InMemoryTransportDouble: UploadTransport {
     func confirmedProgress(for upload: UploadID,
                            in session: TransportSessionID) async throws -> Confirmation {
         calls.append(.asked(session))
+        if let error = questionError { questionError = nil; throw error }
         guard let state = sessions[session], state.intent.upload == upload else {
             throw TransportError.unknownSession
         }
@@ -196,6 +219,7 @@ actor InMemoryTransportDouble: UploadTransport {
 
     func finalize(_ session: TransportSessionID) async throws {
         calls.append(.finalized(session))
+        if let error = questionError { questionError = nil; throw error }
         guard var state = sessions[session] else { throw TransportError.unknownSession }
         guard state.units == Set(state.intent.plan.chunks) else {
             throw TransportError.incompleteUpload

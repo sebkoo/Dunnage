@@ -314,6 +314,30 @@ final class TransportAnswerTests: XCTestCase {
         }
     }
 
+    /// ADR-0009 §4. The reading `confirmedProgress` already has, at the other call.
+    ///
+    /// An operation the authority has no record of reads the same way whichever call
+    /// discovers it, so the 404 that becomes `TransportError.unknownSession` on the parts
+    /// route becomes it on the complete route too. Without this the driver's mapping is
+    /// unreachable from `finalize`: `ControlPlaneError.noSuchUpload` would leave the
+    /// transport unchanged and the driver has no rule for it.
+    ///
+    /// The 404 reading itself stays provisional — it is the stand-in's until the plane
+    /// renders one, which is a later commit's and not this one's.
+    func testTheTransportReadsAForgottenOperationAsUnknownWhenItFinalizesToo() async throws {
+        let forgetful = PlaneJournal()
+        await forgetful.answerComplete(with: PlaneResponse(status: 404,
+                                                           body: Data(#"{"error":"no such upload"}"#.utf8)))
+        let f = try fixture(plane: forgetful)
+        do {
+            try await f.transport.finalize(f.session)
+            XCTFail("a complete against an operation the authority has no record of returned")
+        } catch let error as TransportError {
+            XCTAssertEqual(error, .unknownSession,
+                           "finalize must read a forgotten operation the way the ask already does")
+        }
+    }
+
     /// The one test that goes through the session: a completion the wire delivers on its
     /// own stream reaches the send that is awaiting it. Every other test here calls
     /// `deliver` directly, so without this one the `Task` `adopt()` starts could be deleted

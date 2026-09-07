@@ -115,11 +115,22 @@ public struct UploadDriver: Sendable {
 
     /// Do one effect, and hand back whatever the events it produced asked for next.
     ///
-    /// A thrown error becomes no event. There is nothing in the alphabet that means "the
-    /// request could not be made", and inventing a mapping would be the synthesis ADR-0002
-    /// forbids: `unknownSession` is an answer about the operation, not about a chunk. So the
-    /// log is left as it is and the error goes out to the caller, which means a later run
-    /// replays to exactly the state this one started from.
+    /// A thrown error becomes no event, with exactly two exceptions. There is nothing in the
+    /// alphabet that means "the request could not be made", and inventing one would be the
+    /// synthesis ADR-0002 forbids, so the log is left as it is and the error goes out to the
+    /// caller — a later run then replays to exactly the state this one started from.
+    ///
+    /// The exceptions are `TransportError.unknownSession` and `.unrecognisedSession`, thrown
+    /// from a question: the ask, or the finalize. Both are answers about the operation rather
+    /// than about a chunk, and both strand the upload the same way, so each becomes exactly
+    /// one `transportSessionLost` naming the operation it was thrown about, and the fold asks
+    /// for a replacement (ADR-0009 §4). This is a mapping and not a conclusion — the event
+    /// says what the transport said, and no chunk appears anywhere in it.
+    ///
+    /// **`send` is left alone.** A send's answer is about a chunk, and a loss discovered
+    /// while sending is discovered again by the ask that always precedes the next send:
+    /// Core's `.send` is only ever produced by settling a confirmation. Mapping there would
+    /// add a second path to the same event for no case the first path misses.
     private func perform(_ effect: UploadEffect,
                          for upload: UploadID,
                          into state: inout UploadMachineState) async throws -> [UploadEffect] {
@@ -129,7 +140,12 @@ public struct UploadDriver: Sendable {
             return try await record(.transportSessionOpened(session), for: upload, into: &state)
 
         case .askAuthorityForConfirmedProgress(let upload, let session):
-            let confirmation = try await transport.confirmedProgress(for: upload, in: session)
+            let confirmation: Confirmation
+            do {
+                confirmation = try await transport.confirmedProgress(for: upload, in: session)
+            } catch TransportError.unknownSession, TransportError.unrecognisedSession {
+                return try await record(.transportSessionLost(session), for: upload, into: &state)
+            }
             return try await record(.authorityReported(confirmation), for: upload, into: &state)
 
         case .send(let transfers, let intent, let session, let after):
@@ -148,7 +164,11 @@ public struct UploadDriver: Sendable {
             return produced
 
         case .finalize(_, let session):
-            try await transport.finalize(session)
+            do {
+                try await transport.finalize(session)
+            } catch TransportError.unknownSession, TransportError.unrecognisedSession {
+                return try await record(.transportSessionLost(session), for: upload, into: &state)
+            }
             return try await record(.finalized, for: upload, into: &state)
 
         case .abandon(_, let reason):
