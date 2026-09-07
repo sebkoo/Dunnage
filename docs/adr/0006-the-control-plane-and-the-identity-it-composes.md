@@ -499,11 +499,14 @@ comes only from replaying the log, and a cold start finds everything it needs th
 alone cannot locate the file, so for any transport that must open one, the claim is false as
 written. Phases 1 to 3 did not expose it because nothing in them opened a file.
 
-It is closed in 4b by a `PayloadRef` on `UploadIntent`, opaque to Core the way
-`DestinationRef` is. That is a change to a Core type the ledger writes, so it bumps
-`LedgerFormat.version` from 1 to 2 — the second version ADR-0004 said would need a reader
-that has seen two. Whether that reader is written, or a version-1 log is simply refused under
-ADR-0004 §4, is 4b's to decide with the change.
+It was closed by a `PayloadRef` on `UploadIntent`, opaque to Core the way `DestinationRef`
+is — in phase 5 and not in 4b, by ADR-0007 §8, which says so in as many words: *"This
+closes ADR-0006 O-12, and it closes the gap that O-12 found in a phase-1 claim: a cold
+start now finds the payload on the log."* That is a change to a Core type the ledger
+writes, so it bumped `LedgerFormat.version` from 1 to 2 — the second version ADR-0004 said
+would need a reader that has seen two. Whether that reader was written, or a version-1 log
+simply refused under ADR-0004 §4, was decided there too: **refused rather than migrated**,
+and the reader is not written, because no version-1 log exists outside the suite.
 
 *Moved to phase 5 by ADR-0007 §8.*
 
