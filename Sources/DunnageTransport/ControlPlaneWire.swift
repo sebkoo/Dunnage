@@ -72,10 +72,10 @@ public enum ControlPlaneWire {
         }
     }
 
-    /// `{"parts":[n,...]}` from the parts route — the part numbers the authority holds,
-    /// as the set they are. `parts.ts` answers 400 for a missing uploadId, 401
-    /// unauthenticated, and 500 when `ListParts` truncates its page; reading past one page
-    /// is 4b's, so a truncated answer is a plane failing here and not a short list.
+    /// `{"parts":[n,...]}` from the parts route — the part numbers the authority holds, as
+    /// the set they are. `parts.ts` answers 400 for a missing uploadId, 401 unauthenticated,
+    /// and 500 when `ListParts` truncates its page; reading past one page is ADR-0006 O-20
+    /// and undecided, so a truncated answer is a plane failing here and not a short list.
     ///
     /// A part number below 1, or one that is not an integer, is `unreadableAnswer` and
     /// never a filtered-out element. Filtering would drop an answer this transport cannot

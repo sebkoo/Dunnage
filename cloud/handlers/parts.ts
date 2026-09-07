@@ -48,9 +48,9 @@ export async function handler(
   // ListParts pages at 1000 (MaxParts), and this handler reads one page. A truncated answer
   // served as if it were whole reports fewer parts than the authority holds, and Core would
   // then re-send parts already confirmed — which is the one thing this repository claims
-  // never happens. So it is refused loudly rather than served short. The page loop over
-  // NextPartNumberMarker belongs to 4b, where a contract run against a real bucket can
-  // exercise it.
+  // never happens. So it is refused loudly rather than served short. Whether there is a page
+  // loop over NextPartNumberMarker at all is ADR-0006 O-20 and undecided: a contract run could
+  // exercise one, but whether this repository supports an upload that needs it is the question.
   //
   // This branch carries no test. Reaching it needs a truncated page, nothing here may fake
   // one — a stubbed S3Client is a double of a vendor's product, which ADR-0006 §4 forbids —

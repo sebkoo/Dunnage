@@ -232,8 +232,8 @@ public actor BackgroundSessionTransport {
     /// The answer is set-shaped because the authority's is: it reports the part numbers it
     /// holds, not a resumable byte offset. `parts.ts` refuses a missing uploadId with 400,
     /// an unauthenticated caller with 401, and a `ListParts` page it had to truncate with
-    /// 500 — reading past one page is 4b's, and a truncated list served as if it were whole
-    /// would under-report what the authority holds.
+    /// 500 — reading past one page is ADR-0006 O-20 and undecided, and a truncated list
+    /// served as if it were whole would under-report what the authority holds.
     ///
     /// The chunk files of what it confirms are deleted here, and here only: a chunk file
     /// goes when the authority confirms the chunk and not when a completion reports it, so

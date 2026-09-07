@@ -506,3 +506,32 @@ that has seen two. Whether that reader is written, or a version-1 log is simply 
 ADR-0004 §4, is 4b's to decide with the change.
 
 *Moved to phase 5 by ADR-0007 §8.*
+
+### O-20. Reading past one `ListParts` page, and the upload that stops when there is more
+
+`ListParts` pages at a thousand parts. `parts.ts` and `complete.ts` read one page and
+refuse a truncated one loudly rather than serving it short: a short answer under-reports
+what the authority holds, Core would then re-send parts already confirmed, and that is
+the one thing this repository claims never happens.
+
+**The exposure is arithmetic and needs no observation.** The app's chunk size is 64 KiB, so a
+thousand parts is **62.5 MiB** and an upload past that truncates. 64 MiB is 1024 chunks and
+already past the page — the boundary is not the round number. `parts.ts` answers 500,
+`ControlPlaneWire` reads that as `unexpectedStatus`, the driver appends nothing and the round
+stops (ADR-0005 §8). The upload is not failed and it cannot move.
+
+**That is ADR-0005 O-10's shape with a different cause**, and a reader meeting this one
+cold should know it is not the same hole. O-10 was an authority that had forgotten the
+operation, and ADR-0009 replaces the operation. Here the operation is intact and the
+answer about it is one this plane refuses to serve — no replacement helps, because the
+replacement would truncate at the same place.
+
+**What is undecided is not what S3 does.** The page limit is documented and the
+arithmetic is ours. It is whether this repository supports an upload of more than a
+thousand parts at all: a scope decision, which may end in a page loop over
+`NextPartNumberMarker`, or in a bound on the plan with the reason written down. Neither
+is decided here, and no observation decides it.
+
+Until it is, the refusal stays loud and the sites that deferred to "4b" name this
+question instead — a pointer at a phase expires when the phase closes, and a pointer at
+a question does not.

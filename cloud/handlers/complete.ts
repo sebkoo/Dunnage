@@ -59,8 +59,8 @@ export async function handler(
   // truncated page would not be a short answer, it would be data loss:
   // CompleteMultipartUpload assembles the object out of exactly the parts it is handed and
   // discards the rest. So a truncated answer is refused loudly here, before any
-  // CompleteMultipartUpload call is made at all. The page loop over NextPartNumberMarker
-  // belongs to 4b, where a contract run against a real bucket can exercise it.
+  // CompleteMultipartUpload call is made at all. Whether there is a page loop over
+  // NextPartNumberMarker at all is ADR-0006 O-20 and undecided.
   //
   // This branch carries no test. Reaching it needs a truncated page, nothing here may fake
   // one — a stubbed S3Client is a double of a vendor's product, which ADR-0006 §4 forbids —
