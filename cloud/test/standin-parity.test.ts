@@ -44,9 +44,10 @@ import { type Handler, event, respond } from './support'
 //     plane's side run with no credential. Reaching it would need a client that fails on
 //     command, and a double of a vendor's product is what ADR-0006 §4 forbids.
 //
-//     **The gap, named rather than implied:** the stand-in's 404 and the plane's 404 are now
-//     two of this repository's own components with nothing comparing them, so the parity
-//     claim is narrower than its name suggests. Whose decision that is has not been made.
+//     **The gap has a number: ADR-0007 O-21.** The stand-in's 404 and the plane's 404 are
+//     now two of this repository's own components with nothing comparing them, so the parity
+//     claim is narrower than its name suggests. What would close it is a decision about
+//     whether a failing client may be supplied, not an observation.
 //  3. The 400 with `{"error":"incomplete upload"}` on complete. The plane cannot make that
 //     refusal: it does not know the plan's N and completes over whatever `ListParts`
 //     returns. Excluded for the same reason, and 4b's is the decision.

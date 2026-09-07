@@ -521,6 +521,37 @@ transfer, which no answer from S3 touches. The shape that could answer it is the
 harness's — a numbered procedure that starts a transfer and records when the authority first
 sees it — and `docs/device-harness.md` does not ask that today.
 
+### O-21. The stand-in's 404 and the plane's 404, with nothing comparing them
+
+§9's rider gave the stand-in's front half one instrument: the same refusal fixtures are
+asked of the four handlers and the four stand-in routes, and the answers are asserted
+equal, so a double that grew more lenient than the plane reds by name. Twelve fixtures are
+in that table.
+
+**One case is not, and it changed sides.** Until the plane rendered a 404 for an operation
+the authority has forgotten, the case was excluded because there was nothing to diff
+against — the plane rendered none. The plane renders one now. **So the two answers are
+both this repository's own, and nothing compares them**, which is exactly the state the
+instrument exists to prevent.
+
+**Why the table cannot simply take it.** Its membership rule is a property and not a
+convenience: every one of the twelve is decided *before* an `S3Client` is constructed,
+which is what lets the plane's side of the diff run on a machine with no credential and no
+bucket. This case is decided *by* an `S3Client` error. A row that reached S3 could not be
+compared there at all — the plane's side would throw where the stand-in answered.
+
+**What would close it is a decision, not an observation.** Whether the handlers may be
+given a seam that lets a failing client be supplied, so the plane's side can be driven to
+its own 404 without a credential. ADR-0006 §4 forbids a double of a vendor's product; a
+seam that accepts a client is not obviously that, and the difference is the decision.
+Nothing about S3 bears on it, so the recorded run cannot answer it and neither can the
+device harness.
+
+**What it costs while open.** The parity claim is narrower than its name suggests. The
+suite says the stand-in refuses what the plane refuses across twelve fixtures, and one
+refusal both of them now make is outside that sentence — recorded here so a reader does
+not read the claim wider than it is.
+
 ## Observed on a device
 
 Nothing yet. `docs/device-harness.md` says what is recorded here and how.
