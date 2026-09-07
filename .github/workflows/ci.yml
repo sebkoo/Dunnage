@@ -277,8 +277,37 @@ jobs:
               "listening on http://127.0.0.1:"*) port=${line##*:}; break ;;
             esac
           done
-          [ -n "$port" ] \
-            || { echo "::error::the stand-in did not print a port within 30 s"; printf '%s' "$seen"; exit 1; }
+          # A try is not a second. `read -t 1` returns when the line arrives or when the
+          # try's second is up, so thirty tries bound the number of questions and not the
+          # wall clock — on the run that produced this branch they took fifty-two seconds.
+          # The message therefore says what the loop enforces, a count, because a reader
+          # who takes seconds at face value goes looking for a thirty-second cause that is
+          # not there. That is O-19's shape in the opposite direction: there a bound in
+          # seconds was fed by a count, here a count was reported as seconds.
+          #
+          # An empty `seen` is a known outcome now rather than a surprise, and on its own
+          # it separates nothing: a process that never started, one that died silently and
+          # one that is merely slow all print nothing. So the branch says what it can
+          # cheaply establish. The bundle's presence and byte count are comparable directly
+          # against the number the cloud job prints for `dist/standin.js`, so a truncated
+          # artifact is visible; whether a process still matches tells died from slow.
+          if [ -z "$port" ]; then
+            echo "::error::the stand-in did not print a port within 30 tries"
+            echo "what it printed, if anything:"
+            if [ -n "$seen" ]; then printf '%s' "$seen"; else echo "  nothing at all"; fi
+            if [ -f standin-bundle/standin.js ]; then
+              echo "standin-bundle/standin.js is present, $(wc -c < standin-bundle/standin.js | tr -d '[:space:]') bytes"
+            else
+              echo "standin-bundle/standin.js is ABSENT"
+            fi
+            alive=$(pgrep -f 'standin-bundle/standin.js' | head -1 || true)
+            if [ -n "$alive" ]; then
+              echo "a process still matches standin-bundle/standin.js, pid $alive"
+            else
+              echo "no live process matches standin-bundle/standin.js"
+            fi
+            exit 1
+          fi
           echo "STANDIN_PID=$(pgrep -f 'standin-bundle/standin.js' | head -1)" >> "$GITHUB_ENV"
           echo "STANDIN_BASE_URL=http://127.0.0.1:$port" >> "$GITHUB_ENV"
           echo "the stand-in is listening on http://127.0.0.1:$port"
