@@ -146,6 +146,9 @@ that demonstrates the need does not exist yet. What is fixed here is what the ca
 be:
 
 - **not a `TransferOutcome`** — it is not an answer about a chunk, so it becomes no event;
+  *ADR-0009 §4 falsifies the last clause, on this bullet's own premise: because it is an
+  answer about the operation and not about a chunk, it becomes exactly one event of its
+  own — `transportSessionLost` — and still no chunk event.*
 - **not an interruption** — an interruption is an event about a chunk whose transfer was
   attempted and did not answer. No transfer was attempted here, so recording one would put
   a claim about a chunk on the log that nothing made;
