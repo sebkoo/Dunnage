@@ -53,6 +53,19 @@ audit cannot see, and reads each field on its own terms — the name for equalit
 address for its domain. A rule wide enough to catch every vendor mention deletes
 people.
 
+### 5. What §3 rests on: the comparison itself has no collation
+
+§3 pins the sorted sides. What it does not say is why that is sufficient: `diff`
+compares lines byte for byte and has no collating order of its own, so there is no
+third place for a disagreement to enter, and nothing is pinned at the comparison.
+
+The premise is invisible in the commands. No flag expresses it, and the step reads
+correct today because of something none of its lines states. A comparator that does
+carry a collation — `comm`, `join`, `sort -c` — reads two `LC_ALL=C` lists under
+whatever locale the runner has and reports differences between lists that agree.
+Written down, reaching for one is a change to a stated premise. Unwritten, the guard
+begins to be wrong about names it has not met yet, and no diff shows it happening.
+
 ## What stays unverified
 
 UNVERIFIED: neither runner's locale was read from the runner. Which collation each

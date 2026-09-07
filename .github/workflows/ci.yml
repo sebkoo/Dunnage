@@ -506,6 +506,13 @@ jobs:
       # deliberately, and says so; here the order carries nothing, and sorting every side
       # under one collation is what makes "the same names" a question three machines can
       # answer the same way.
+      #
+      # What none of the commands below states is that the comparison itself has no
+      # collation: diff compares lines byte for byte, so there is no third place a
+      # disagreement could enter and nothing is pinned at the comparison. A comparator
+      # that does carry one — comm, join, sort -c — reads two LC_ALL=C lists under the
+      # runner's locale and reports differences between lists that agree. ADR-0008 §5
+      # states the premise, so reaching for one is a change to something on record.
       - name: docs/invariants.md names the tests that exist
         run: |
           set -u
