@@ -306,20 +306,36 @@ final class UploadModel: ObservableObject {
 
     /// Confirmed beats reported beats in flight beats planned.
     ///
-    /// `reported` is what a completion said since the authority last spoke, so it is read
-    /// off the events and reset by `authorityReported` — a report is an observation about a
-    /// request and never progress, and the screen keeps the two words apart for the reason
-    /// ADR-0001 §3 keeps the two claims apart.
-    private static func statuses(of intent: UploadIntent,
-                                 given state: UploadMachineState,
-                                 events: [UploadEvent],
-                                 inFlight: Set<ChunkID>) -> [ChunkID: ChunkStatus] {
+    /// `reported` is what a completion said since the authority last spoke, so it is read off
+    /// the events rather than kept — a report is an observation about a request and never
+    /// progress, and the screen keeps the two words apart for the reason ADR-0001 §3 keeps
+    /// the two claims apart. Two events clear it: the authority speaking, which supersedes
+    /// what any completion said before it, and the operation being lost, because a report is
+    /// scoped to the operation that made it and is weaker evidence than the confirmation the
+    /// machine already drops with it (ADR-0009 §3).
+    ///
+    /// Not `private`: this fold is the unit under test, and `App/DunnageAppTests` reaches it
+    /// through `@testable import`.
+    static func statuses(of intent: UploadIntent,
+                         given state: UploadMachineState,
+                         events: [UploadEvent],
+                         inFlight: Set<ChunkID>) -> [ChunkID: ChunkStatus] {
+        // No `default:`, for the reason the transition table has none. What an event does
+        // to this set is a decision, and a new case in Core should be a compile error here
+        // rather than an event that silently changes nothing on the screen — which is
+        // exactly how a loss came to leave a dead operation's reports standing.
         var reported: Set<ChunkID> = []
         for event in events {
             switch event {
-            case .chunkTransferReported(let chunk): reported.insert(chunk)
-            case .authorityReported:                reported = []
-            default:                                break
+            case .chunkTransferReported(let chunk):
+                reported.insert(chunk)
+            case .authorityReported:
+                reported = []
+            case .transportSessionLost:
+                reported = []
+            case .declared, .transportSessionOpened, .chunkTransferRefused,
+                 .chunkTransferInterrupted, .finalized, .abandoned:
+                break
             }
         }
         let confirmed = Self.confirmed(in: state)?.confirmedChunks(in: intent.plan) ?? []

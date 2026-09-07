@@ -554,6 +554,7 @@ and the thesis holds because its bound is per operation under the transport's st
 - `testALossIsWrittenToTheLedgerAndReadBackAsTheEventThatWasWritten`
 - `testFinalizingAgainstAnOperationTheAuthorityForgotIsALossAndNotAFailure`
 - `testTheTransportReadsAForgottenOperationAsUnknownWhenItFinalizesToo`
+- `testTheScreenDropsWhatADeadOperationReportedWhenTheOperationIsReplaced`
 
 ### A loss is evidence about the operation it names, and one naming another operation changes nothing
 
