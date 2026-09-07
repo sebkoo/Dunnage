@@ -1,6 +1,6 @@
 import { ListPartsCommand, S3Client } from '@aws-sdk/client-s3'
 import type { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyStructuredResultV2 } from 'aws-lambda'
-import { objectKey, validateRef, verifiedSub } from './identity'
+import { forgottenOperation, objectKey, validateRef, verifiedSub } from './identity'
 
 // `GET /uploads/{ref}/parts?uploadId=` — ADR-0006 §4. It serves `confirmedProgress`, and
 // the answer is set-shaped because the authority's answer is: S3 reports which part numbers
@@ -31,9 +31,20 @@ export async function handler(
   const key = objectKey(sub, ref)
   // Constructed here and not at module scope: a client built when this file is imported is
   // built before any refusal above has run.
-  const listed = await new S3Client({}).send(
-    new ListPartsCommand({ Bucket: process.env.BUCKET, Key: key, UploadId: uploadId }),
-  )
+  let listed
+  // An operation the authority has no record of is a refusal a device can read, not a fault:
+  // `ControlPlaneWire` reads this 404 as `noSuchUpload` and the transport reads that as
+  // `TransportError.unknownSession`, which Core replaces the operation on (ADR-0009 §4).
+  // Every other error is rethrown, because a plane that answered 404 for an unrelated failure
+  // would have Core replace an operation that is still there.
+  try {
+    listed = await new S3Client({}).send(
+      new ListPartsCommand({ Bucket: process.env.BUCKET, Key: key, UploadId: uploadId }),
+    )
+  } catch (error) {
+    if (!forgottenOperation(error)) throw error
+    return { statusCode: 404, body: JSON.stringify({ error: 'no such upload' }) }
+  }
   // ListParts pages at 1000 (MaxParts), and this handler reads one page. A truncated answer
   // served as if it were whole reports fewer parts than the authority holds, and Core would
   // then re-send parts already confirmed — which is the one thing this repository claims

@@ -36,10 +36,17 @@ import { type Handler, event, respond } from './support'
 //     stand-in's own here — so there is nothing on the plane's side to diff against. It is
 //     covered by the stand-in's own test, and settled by 4b's contract run with ADR-0006
 //     §4's fourth falsifier.
-//  2. The 404 for an uploadId not under the key. The plane renders none: `parts.ts` and
-//     `complete.ts` catch nothing from S3, so `NoSuchUpload` escapes unhandled. Diffing a
-//     404 against an unhandled error would assert the plane behaves as it does not. 4b
-//     decides what the plane should render.
+//  2. The 404 for an uploadId not under the key. The plane now renders one — `parts.ts` and
+//     `complete.ts` read `forgottenOperation` and answer 404 — so the old reason for
+//     excluding it, that there was nothing to diff against, is gone. It stays out for the
+//     membership rule stated above instead: this row is decided *by* an `S3Client` error, and
+//     every row here is decided before an `S3Client` is constructed, which is what lets the
+//     plane's side run with no credential. Reaching it would need a client that fails on
+//     command, and a double of a vendor's product is what ADR-0006 §4 forbids.
+//
+//     **The gap, named rather than implied:** the stand-in's 404 and the plane's 404 are now
+//     two of this repository's own components with nothing comparing them, so the parity
+//     claim is narrower than its name suggests. Whose decision that is has not been made.
 //  3. The 400 with `{"error":"incomplete upload"}` on complete. The plane cannot make that
 //     refusal: it does not know the plan's N and completes over whatever `ListParts`
 //     returns. Excluded for the same reason, and 4b's is the decision.

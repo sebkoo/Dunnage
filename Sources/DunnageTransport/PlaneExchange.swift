@@ -47,8 +47,12 @@ public enum ControlPlaneError: Error, Hashable, Sendable {
     case refused(status: Int)
     /// Any other status outside 2xx. A 5xx is the plane failing, not refusing.
     case unexpectedStatus(Int)
-    /// 404. Provisional: the stand-in's reading of an upload the authority has no record
-    /// of, and what the plane renders for one is settled in 4b (ADR-0007 §9, item 2).
+    /// 404: what the plane answers for an operation the authority has no record of. The
+    /// stand-in assumed it and the plane now renders it, for an error of the shape
+    /// `forgottenOperation` reads — established with no account.
+    ///
+    /// One link earlier is still open: whether S3 raises that shape for a mismatched key and
+    /// upload identifier is ADR-0010's second UNVERIFIED, and only the recorded run settles it.
     case noSuchUpload
     /// A 2xx whose body is not the route's shape.
     case unreadableAnswer(status: Int)

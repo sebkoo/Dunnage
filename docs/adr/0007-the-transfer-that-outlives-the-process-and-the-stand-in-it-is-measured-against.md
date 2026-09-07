@@ -300,6 +300,10 @@ and nothing about S3.
    reads as `.unknownSession`, is settled in 4b when the contract run shows S3's actual
    error shape — see "Deliberately not decided". ADR-0006 §4's first falsifier is the
    same run.
+   *Three fates, and not one. The description of the two handlers is false from the commit
+   that made them read `forgottenOperation` and answer 404. The sentence after it narrows
+   rather than resolves: the plane's rendering is established, conditionally on the shape.
+   The UNVERIFIED headline stands, and ADR-0010's second UNVERIFIED now owns it.*
 3. UNVERIFIED: that S3 answers a presigned part PUT with a 2xx status and an `ETag` header
    (§1's fourth rider). The stand-in answers 200 and a header the transport does not read.
    4b's contract run checks it.
@@ -384,6 +388,9 @@ observation, and the sentence is not softened.
   settled in 4b, when the contract run shows S3's actual error shape. Until then the
   transport's 404 reading is provisional and is written against the stand-in, and the
   commit that lands it says so.
+  *"The plane today lets S3's error escape unhandled" is false from the commit that made
+  `parts.ts` and `complete.ts` answer 404 for it. What a device sees is settled to that
+  extent and no further: the shape S3 raises is ADR-0010's second UNVERIFIED.*
 
 ## Open questions
 

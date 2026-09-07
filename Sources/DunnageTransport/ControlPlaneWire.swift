@@ -113,10 +113,11 @@ public enum ControlPlaneWire {
         _ = try object(in: response)
     }
 
-    /// The status rule, then the body. 400, 401 and 403 are the routes' documented
-    /// refusals; 404 is the stand-in's reading of an upload the authority has no record
-    /// of, provisional until 4b (ADR-0007 §9, item 2); anything else outside 2xx is the
-    /// plane failing, not refusing, and the two are not one case for the reason Core
+    /// The status rule, then the body. 400, 401 and 403 are the routes' documented refusals;
+    /// 404 is what the plane answers for an operation the authority has no record of, which
+    /// the stand-in assumed and the plane now renders — what S3 raises for a mismatched key
+    /// and upload identifier is ADR-0010's second UNVERIFIED; anything else outside 2xx is
+    /// the plane failing, not refusing, and the two are not one case for the reason Core
     /// keeps a refusal and an interruption apart. Only then is the body read.
     private static func object(in response: PlaneResponse) throws -> [String: Any] {
         switch response.status {

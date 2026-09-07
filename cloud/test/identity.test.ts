@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { objectKey, validateRef } from '../handlers/identity'
+import { forgottenOperation, objectKey, validateRef } from '../handlers/identity'
 
 describe('validateRef', () => {
   // One assertion over every case, not an assertion inside a loop. `expect` throws, so a
@@ -33,5 +33,40 @@ describe('objectKey', () => {
   // is not a leaf in this caller's own prefix.
   test('testTheObjectKeyIsDerivedFromTheVerifiedPrincipalAndTheRefAlone', () => {
     expect(objectKey('sub-1', 'photo.jpg')).toBe('uploads/sub-1/photo.jpg')
+  })
+})
+
+describe('forgottenOperation', () => {
+  // ADR-0009 §4 and ADR-0010's second UNVERIFIED. This is the middle link of three: S3 raises
+  // something for a mismatched key and upload identifier (UNVERIFIED, the recorded run's), the
+  // plane maps an error of the shape read here to a 404 (this function), and the transport
+  // reads that 404 as `TransportError.unknownSession` (already in the tree).
+  //
+  // **It is not a stubbed `S3Client`.** ADR-0006 §4 forbids doubling a vendor's product, so
+  // this is our own reading over our own fixtures — which is exactly why it can be established
+  // with no account and no credential.
+  test('testAnOperationTheAuthorityForgotIsRenderedAsARefusalTheTransportReads', () => {
+    // Both shapes the SDK is documented to use, and each on its own: a v3 error carries `name`,
+    // and an older or wrapped one carries `Code`. Every case is collected and asserted over, so
+    // one shape failing never hides the next.
+    const forgotten: ReadonlyArray<readonly [string, unknown]> = [
+      ['an error whose name is the one read', { name: 'NoSuchUpload' }],
+      ['an error whose Code is the one read', { Code: 'NoSuchUpload' }],
+      ['both, as a real client sends', { name: 'NoSuchUpload', Code: 'NoSuchUpload', $metadata: {} }],
+    ]
+    const other: ReadonlyArray<readonly [string, unknown]> = [
+      ['a different refusal', { name: 'AccessDenied' }],
+      ['a different refusal by Code', { Code: 'NoSuchKey' }],
+      ['a name that merely contains it', { name: 'NotNoSuchUploadEither' }],
+      ['nothing at all', undefined],
+      ['null', null],
+      ['a string', 'NoSuchUpload'],
+      ['an object with no name and no Code', { $metadata: {} }],
+    ]
+
+    const missed = forgotten.filter(([, e]) => !forgottenOperation(e)).map(([what]) => what)
+    const overreached = other.filter(([, e]) => forgottenOperation(e)).map(([what]) => what)
+
+    expect({ missed, overreached }).toEqual({ missed: [], overreached: [] })
   })
 })

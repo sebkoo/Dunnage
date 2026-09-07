@@ -239,9 +239,10 @@ public actor BackgroundSessionTransport {
     /// goes when the authority confirms the chunk and not when a completion reports it, so
     /// the files that exist at once are bounded by the in-flight set (ADR-0007 §7).
     ///
-    /// 404 becomes `TransportError.unknownSession`, and that reading is provisional: it is
-    /// the stand-in's, until 4b's contract run shows what the plane renders for an upload
-    /// S3 has no record of (ADR-0007 §9, item 2).
+    /// 404 becomes `TransportError.unknownSession`. The plane renders that 404 for an
+    /// operation the authority has no record of, and that much is established here with no
+    /// account. What stays open is one link earlier — what S3 raises for a mismatched key and
+    /// upload identifier — which is ADR-0010's second UNVERIFIED and the recorded run's.
     public func confirmedProgress(for upload: UploadID,
                                   in session: TransportSessionID) async throws -> Confirmation {
         let identity = try SessionIdentity.parse(session)
@@ -278,7 +279,7 @@ public actor BackgroundSessionTransport {
         } catch ControlPlaneError.noSuchUpload {
             // The reading `confirmedProgress` already has, at the other call: an operation
             // the authority has no record of reads the same way whichever call discovers
-            // it (ADR-0009 §4). Still provisional, and for the same reason as there.
+            // it (ADR-0009 §4). The same reading and the same open link as there.
             throw TransportError.unknownSession
         }
     }

@@ -555,6 +555,7 @@ and the thesis holds because its bound is per operation under the transport's st
 - `testFinalizingAgainstAnOperationTheAuthorityForgotIsALossAndNotAFailure`
 - `testTheTransportReadsAForgottenOperationAsUnknownWhenItFinalizesToo`
 - `testTheScreenDropsWhatADeadOperationReportedWhenTheOperationIsReplaced`
+- `testAnOperationTheAuthorityForgotIsRenderedAsARefusalTheTransportReads`
 
 ### A loss is evidence about the operation it names, and one naming another operation changes nothing
 
@@ -645,9 +646,9 @@ no contract a test could check. `openSession` calls `POST /uploads` and `send` c
 speak them, because the pure half is one function per route and reads no state. On the
 wire, 400, 401 and 403 are `refused`, and any other status outside 2xx is
 `unexpectedStatus`: a 5xx is the plane failing, not refusing, and the two are kept apart
-for the reason Core keeps a refusal and an interruption apart. The `.noSuchUpload` reading
-of 404 is provisional — the stand-in's, until 4b shows what the plane renders (ADR-0007 §9,
-item 2).
+for the reason Core keeps a refusal and an interruption apart. The `.noSuchUpload` reading of
+404 is what the plane answers for an operation the authority has no record of; what S3 raises
+for a mismatched key and upload identifier is ADR-0010's second UNVERIFIED.
 
 The ninth is about the instrument the eight above wait with rather than about a send.
 `whenRegistered(_:on:of:)` returns only once the waiter it counted is one that

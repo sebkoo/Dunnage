@@ -1,6 +1,6 @@
 import { CompleteMultipartUploadCommand, ListPartsCommand, S3Client } from '@aws-sdk/client-s3'
 import type { APIGatewayProxyEventV2WithJWTAuthorizer, APIGatewayProxyStructuredResultV2 } from 'aws-lambda'
-import { objectKey, validateRef, verifiedSub } from './identity'
+import { forgottenOperation, objectKey, validateRef, verifiedSub } from './identity'
 
 // `POST /uploads/{ref}/complete {uploadId}` — ADR-0006 §4. `finalize` is a control-plane
 // call and not a device call: `CompleteMultipartUpload` requires the caller to hand back
@@ -41,9 +41,20 @@ export async function handler(
   // Constructed here and not at module scope: a client built when this file is imported is
   // built before any refusal above has run.
   const client = new S3Client({})
-  const listed = await client.send(
-    new ListPartsCommand({ Bucket: process.env.BUCKET, Key: key, UploadId: uploadId }),
-  )
+  let listed
+  // An operation the authority has no record of is a refusal a device can read, not a fault:
+  // `ControlPlaneWire` reads this 404 as `noSuchUpload` and the transport reads that as
+  // `TransportError.unknownSession`, which Core replaces the operation on (ADR-0009 §4).
+  // Every other error is rethrown, because a plane that answered 404 for an unrelated failure
+  // would have Core replace an operation that is still there.
+  try {
+    listed = await client.send(
+      new ListPartsCommand({ Bucket: process.env.BUCKET, Key: key, UploadId: uploadId }),
+    )
+  } catch (error) {
+    if (!forgottenOperation(error)) throw error
+    return { statusCode: 404, body: JSON.stringify({ error: 'no such upload' }) }
+  }
   // ListParts pages at 1000 (MaxParts), and this handler reads one page. Completing over a
   // truncated page would not be a short answer, it would be data loss:
   // CompleteMultipartUpload assembles the object out of exactly the parts it is handed and
@@ -61,13 +72,21 @@ export async function handler(
   // ADR-0006 §4 falsifier 2 is precisely this: if a transformation turns out to be needed,
   // this file is wrong, and 4b's recorded contract run is where that is found out.
   const parts = (listed.Parts ?? []).map(part => ({ PartNumber: part.PartNumber, ETag: part.ETag }))
-  const completed = await client.send(
-    new CompleteMultipartUploadCommand({
-      Bucket: process.env.BUCKET,
-      Key: key,
-      UploadId: uploadId,
-      MultipartUpload: { Parts: parts },
-    }),
-  )
+  // The same reading at the second call. The authority can forget the operation between the
+  // listing and the completion, and a device reads that the same way whichever call found it.
+  let completed
+  try {
+    completed = await client.send(
+      new CompleteMultipartUploadCommand({
+        Bucket: process.env.BUCKET,
+        Key: key,
+        UploadId: uploadId,
+        MultipartUpload: { Parts: parts },
+      }),
+    )
+  } catch (error) {
+    if (!forgottenOperation(error)) throw error
+    return { statusCode: 404, body: JSON.stringify({ error: 'no such upload' }) }
+  }
   return { statusCode: 200, body: JSON.stringify({ etag: completed.ETag }) }
 }

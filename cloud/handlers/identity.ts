@@ -37,3 +37,25 @@ export function verifiedSub(event: APIGatewayProxyEventV2WithJWTAuthorizer): str
   const sub = event.requestContext?.authorizer?.jwt?.claims?.sub
   return typeof sub === 'string' && sub.length > 0 ? sub : undefined
 }
+
+// The one reading of "the authority has no record of this operation", in one place because two
+// handlers need it and a second copy is a second thing to get wrong — the same argument
+// `objectKey` above is here for.
+//
+// It reads a shape and never a client. ADR-0006 §4 forbids a double of a vendor's product, so
+// what is asserted about this function is asserted over hand-made objects, which is exactly why
+// it can be established with no account and no credential.
+//
+// Both `name` and `Code` are read: the v3 client sets `name`, and an older or wrapped error
+// carries `Code`. Equality and not a substring — an error whose name merely contains the token
+// is a different error, and reading it as this one would turn an unrelated refusal into a
+// forgotten operation.
+//
+// **What this does not establish:** that S3 raises this name for a mismatched key and upload
+// identifier. That is ADR-0010's second UNVERIFIED, and only the recorded run settles it. This
+// function is the middle of three links, and it is the only one that can be established here.
+export function forgottenOperation(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false
+  const { name, Code } = error as { name?: unknown; Code?: unknown }
+  return name === 'NoSuchUpload' || Code === 'NoSuchUpload'
+}
