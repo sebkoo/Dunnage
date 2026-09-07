@@ -63,7 +63,11 @@ initiate-authentication call.
 
 **So the only way to obtain a token for this stack is with the account's own credentials.** No
 password flow is open to the internet, no hosted sign-in surface exists, and the pool is not a
-login surface. Two tests assert the rendered set exactly rather than its shape.
+login surface. **That last claim rests on one absent resource**: the client already renders the
+OAuth properties a hosted sign-in would use, and only the missing
+`AWS::Cognito::UserPoolDomain` keeps the pool from being one. Whether it should render them at
+all is O-23. Two tests: one asserts the rendered flow set exactly rather than its shape, the
+other asserts that absent resource.
 
 The app does not change. A token enters in one place, as it already does: the operator mints
 one and pastes it in. It expires within the hour, so a longer run pastes another, and the
@@ -186,6 +190,36 @@ error's name and code verbatim rather than whether they matched.** Recording the
 than the verdict is what makes the record survive an unexpected answer. If the name differs,
 the correction is one function and one commit, which is why the reading was written before the
 run: it makes the run a check rather than an exploration.
+
+## Open questions
+
+### O-23. The client renders an OAuth configuration the source never asks for
+
+`lib/stack.ts` says nothing about OAuth: it contains no `oauth`, no `callback`, no `implicit`.
+The synthesised template says otherwise. The client renders `AllowedOAuthFlows` of `implicit`
+and `code`, `AllowedOAuthFlowsUserPoolClient` true, five `AllowedOAuthScopes`, a `CallbackURLs`
+of `https://example.com` — the construct library's own placeholder, not this repository's — and
+`SupportedIdentityProviders` of `COGNITO`.
+
+**A reader of the source concludes the client has no OAuth configuration at all.** Only the
+artefact says otherwise — which is why every claim §2 makes is read off the template rather
+than off the constructor, and why this question exists at all.
+
+**What §2's third claim rests on.** *No hosted sign-in surface exists* is true, and it rests on
+exactly one absent resource: there is no `AWS::Cognito::UserPoolDomain`. Every other
+prerequisite is already rendered, so adding a domain is a one-line change that turns the pool
+into a login surface with no other edit. The `implicit` grant is among the flows already
+configured, and an implicit grant returns its tokens in a URL fragment rather than in a
+response body — stated from what the grant is, not from a standard this document has not read.
+
+**What is undecided.** Whether the client should render those properties at all, or should set
+them explicitly to something this repository chose. The construct library chose them; nobody
+here did. Nothing observed decides it: no run against an account and no answer from the service
+tells this stack what its own client ought to declare. It is a decision about this stack.
+
+**What it costs while open.** §2's third sentence is true and thin, and now says so. A reader
+taking *the pool is not a login surface* for a structural property is taking more from it than
+one absent resource can carry.
 
 ## Observed against a deployed plane
 
