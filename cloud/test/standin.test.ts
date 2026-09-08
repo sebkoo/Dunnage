@@ -1,4 +1,7 @@
+import { existsSync, mkdtempSync, readFileSync } from 'node:fs'
 import type { AddressInfo } from 'node:net'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'vitest'
 import { EXPIRES_IN_SECONDS } from '../handlers/urls'
 import type { StandIn } from '../standin/server'
@@ -24,8 +27,19 @@ let now = 0
 let server: StandIn
 let base = ''
 
+// One directory per run, under the system's temp, and it is not removed on the way out: on
+// a red run this file is the evidence, and a suite that tidied it away would delete exactly
+// what the run is for. It is the suite's own log; the one CI uploads is the bundle's,
+// written to the path `DUNNAGE_STANDIN_LOG` names.
+const logPath = join(mkdtempSync(join(tmpdir(), 'dunnage-standin-')), 'requests.jsonl')
+
+function logLines(): readonly string[] {
+  if (!existsSync(logPath)) return []
+  return readFileSync(logPath, 'utf8').split('\n').filter(line => line.length > 0)
+}
+
 beforeAll(async () => {
-  server = createStandIn({ now: () => now })
+  server = createStandIn({ now: () => now, log: logPath })
   await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve))
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
 })
@@ -305,6 +319,97 @@ describe("the stand-in's own contract", () => {
       askedAfterwards: { arrived: undefined, stored: undefined },
       status: 200,
     })
+  })
+
+  // The instrument the simulator failure of 2026-09-06 could not be read without: which
+  // upload was answered, in what order, and with what status. It is asserted on a green run
+  // rather than looked at after a red one, because a writer whose output is only ever read
+  // after something else has broken has no evidence it still works.
+  //
+  // The mark is the file's length before this test asks anything, so what is compared is
+  // this test's own requests; the suite's other lines are neither read nor required.
+  //
+  // Nothing here asserts anything about the clock. `ms` is read for being a finite number
+  // and never compared — not between two lines, not against a bound — because a suite that
+  // timed the instrument would be a wait, and this phase takes none.
+  test('testEveryRequestTheStandInAnswersIsOnItsOwnLogWithTheUploadItNames', async () => {
+    const faults: string[] = []
+    const mark = logLines().length
+
+    const uploadId = await openUpload('sub-9', 'photo.jpg', 1)
+    const [first] = await partUrls('sub-9', 'photo.jpg', uploadId, 1)
+    const payload = 'these bytes are a part body and never belong in a log'
+    await fetch(first, { method: 'PUT', body: payload })
+    await heldParts('sub-9', 'photo.jpg', uploadId)
+    await complete('photo.jpg', uploadId, 'sub-9')
+    await counters(uploadId)
+    await status('/uploads/%zz/parts', 'sub-9')
+    await status('/nothing', 'sub-9')
+
+    // The field set and its order, pinned together. Seven fields, and an eighth is the
+    // shape a body would arrive in; the line is an artifact whose readers find fields by
+    // name, so the order is pinned with them.
+    const fields = 'seq,ms,method,path,upload,part,status'
+    const asked = [
+      { method: 'POST', path: '/uploads', upload: uploadId, part: null, status: 200 },
+      { method: 'POST', path: '/uploads/photo.jpg/urls', upload: uploadId, part: null, status: 200 },
+      // A PUT that does not say which part cannot answer what a re-send asks.
+      { method: 'PUT', path: new URL(first).pathname, upload: uploadId, part: 1, status: 200 },
+      { method: 'GET', path: '/uploads/photo.jpg/parts', upload: uploadId, part: null, status: 200 },
+      { method: 'POST', path: '/uploads/photo.jpg/complete', upload: uploadId, part: null, status: 200 },
+      // The control surface is on the log too, and the field means the same thing there: a
+      // path that names an upload is a request about that upload, whichever prefix it is
+      // under. A reader who finds an id in the path and `null` in the field learns to
+      // distrust the field.
+      { method: 'GET', path: `/_standin/uploads/${uploadId}`, upload: uploadId, part: null, status: 200 },
+      // A path this server cannot parse is still a request it answered. The segments are
+      // decoded before any route is chosen, a malformed escape throws there, and the 500
+      // that answers it is written by the same catch that answers any other throw — so the
+      // hook has to be on the response before the parse, or the one answer that most needs
+      // reading is the one answer that is not on the log.
+      { method: 'GET', path: '/uploads/%zz/parts', upload: null, part: null, status: 500 },
+      // A route that names no upload writes `null` rather than leaving the field out: an
+      // absent field and an unnamed upload must not read the same in the artifact.
+      { method: 'GET', path: '/nothing', upload: null, part: null, status: 404 },
+    ]
+
+    const written = logLines()
+    const mine = written.slice(mark)
+    if (mine.length !== asked.length) {
+      faults.push(`${asked.length} requests were answered and ${mine.length} lines were written`)
+    }
+    // Every request reports, and every field of it: a line that is wrong in three fields
+    // says all three, and a line missing in the middle does not hide the ones after it.
+    asked.forEach((want, index) => {
+      const line = mine[index]
+      if (line === undefined) {
+        faults.push(`${want.method} ${want.path} is on no line`)
+        return
+      }
+      const record = JSON.parse(line) as Record<string, unknown>
+      const carried = Object.keys(record).join(',')
+      if (carried !== fields) faults.push(`line ${index + 1} carries ${carried}, and a line carries ${fields}`)
+      if (!Number.isFinite(record.ms)) faults.push(`line ${index + 1} has no elapsed milliseconds`)
+      for (const field of ['method', 'path', 'upload', 'part', 'status'] as const) {
+        if (record[field] !== want[field]) {
+          faults.push(
+            `line ${index + 1}: ${field} is ${JSON.stringify(record[field])}, and the request's was ${JSON.stringify(want[field])}`,
+          )
+        }
+      }
+    })
+
+    // Over the whole file, because the sequence is the server's ordering of its answers and
+    // not this test's ordering of its requests.
+    const sequence = written.map(line => (JSON.parse(line) as { seq: unknown }).seq)
+    if (sequence.some((seq, index) => seq !== index + 1)) {
+      faults.push(`the answers are numbered ${sequence.join(', ')}, and they number 1, 2, 3 …`)
+    }
+    if (written.join('\n').includes(payload)) {
+      faults.push('the log carries a part body, and a part body is payload bytes')
+    }
+
+    expect(faults, `the log is at ${logPath}`).toEqual([])
   })
 })
 

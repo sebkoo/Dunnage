@@ -1,4 +1,5 @@
 import { createHmac, randomBytes, randomUUID, timingSafeEqual } from 'node:crypto'
+import { appendFileSync } from 'node:fs'
 import { createServer as createHttpServer } from 'node:http'
 import type { IncomingMessage, Server, ServerResponse } from 'node:http'
 import type { AddressInfo } from 'node:net'
@@ -80,6 +81,9 @@ export type StandInOptions = {
   // The one clock this server reads, injected so a test can reach a URL's expiry without
   // waiting out its life. Defaults to the wall clock, which is what the bundle runs on.
   readonly now?: () => number
+  // Where to append the request log, one line per answered request. Absent means no log is
+  // written and nothing else changes: a server started without one opens no file.
+  readonly log?: string
 }
 
 // The handle the vitest suite holds. It is a `Server` — `listen`, `close`,
@@ -108,6 +112,59 @@ export function createStandIn(options: StandInOptions = {}): StandIn {
   // (spec §3.3), and the harness holds one part of the one upload under test.
   const holds = new Map<number, Hold>()
 
+  // One JSON line per answered request: `seq`, `ms`, `method`, `path`, `upload`, `part`,
+  // `status`, and **never a body**. A part's body is payload bytes and this file leaves a
+  // runner as a public artifact.
+  //
+  // Its own file, never stdout. `ci.yml`'s "Start the stand-in" step reads this process's
+  // stdout for the port line and stops reading once it has one; a request record written
+  // there fills the pipe buffer, and when it fills the stand-in blocks in `write`. The
+  // instrument would stop the thing it is measuring.
+  //
+  // `Date.now()` and not `options.now`: the injected clock exists so a test can reach a
+  // URL's expiry without waiting out its life, and a log that read it would date every line
+  // of a fixed-clock run identically. The log measures the run; that clock measures a URL.
+  const started = Date.now()
+  let answers = 0
+  // Touched once, here, so a path that cannot be written fails while the server is being
+  // built and names itself — rather than throwing inside a response listener, mid-run, on
+  // whichever request happened to be first.
+  if (options.log !== undefined) appendFileSync(options.log, '')
+
+  // What the request is about, filled in by whichever branch learns it: three routes carry
+  // the uploadId in a body `route` must not consume, and `create` mints one.
+  type Named = { upload?: string; part?: number }
+
+  function logWhenAnswered(res: ServerResponse, method: string, path: string, named: Named): void {
+    const log = options.log
+    if (log === undefined) return
+    let written = false
+    const write = (status: number): void => {
+      // One line per request, whichever of the two callers gets here first.
+      if (written) return
+      written = true
+      answers += 1
+      const line = JSON.stringify({
+        seq: answers,
+        ms: Date.now() - started,
+        method,
+        path,
+        // `null` and not an absent field: a route that names no upload and a writer that
+        // failed to name one must not read the same in the artifact.
+        upload: named.upload ?? null,
+        part: named.part ?? null,
+        status,
+      })
+      appendFileSync(log, `${line}\n`)
+    }
+    ;(res as Recorded)[RECORD] = write
+    // The backstop, and only that. Every answer this server writes goes through `json`,
+    // `refusePut` or the PUT's own 200, and each records before its status line. A path
+    // that grew later and did neither still gets a line here, a turn of the event loop
+    // late — which is the reason this is the second mechanism and not the first.
+    res.on('finish', () => write(res.statusCode))
+  }
+
   const server = createHttpServer((req, res) => {
     route(req, res).catch(error => {
       // A throw is answered rather than left to hang the socket the test is waiting on.
@@ -116,6 +173,18 @@ export function createStandIn(options: StandInOptions = {}): StandIn {
   })
 
   async function route(req: IncomingMessage, res: ServerResponse): Promise<void> {
+    const method = req.method ?? 'GET'
+    const named: Named = {}
+    // Before anything below can throw, and that ordering is the point. Decoding the
+    // segments rejects a malformed escape by throwing, and the 500 answering it is written
+    // by the same catch as any other throw — so a hook attached after the parse leaves the
+    // one answer that most needs reading off the log.
+    //
+    // The target as it arrived, with the query stripped, and never `req.url` whole: a
+    // PUT's query carries the signature this file mints and the log is a public artifact.
+    // Stripped, it is the string `url.pathname` gives for every request that parses.
+    logWhenAnswered(res, method, (req.url ?? '/').split('?')[0], named)
+
     // The host is the request's own, so a URL this server issues points back at the
     // interface the caller reached it on — the ephemeral port a test bound, or the address
     // the harness typed into the app.
@@ -125,21 +194,32 @@ export function createStandIn(options: StandInOptions = {}): StandIn {
     // nothing for a real reference; it is what lets a refusal fixture carry `../etc`
     // through a path without a URL parser resolving the dot segments away.
     const path = url.pathname.split('/').filter(part => part.length > 0).map(decodeURIComponent)
-    const method = req.method ?? 'GET'
 
-    if (path[0] === '_standin') return standInControl(method, path, req, res)
+    if (path[0] === '_standin') {
+      // The control surface is on the log too, and `upload` means the same thing there as
+      // everywhere else: the upload the request names, whichever prefix it is under. One
+      // control route names one — the counters — and it says so.
+      if (method === 'GET' && path[1] === 'uploads' && path.length === 3) named.upload = path[2]
+      return standInControl(method, path, req, res)
+    }
     if (method === 'PUT' && path[0] === '_part' && path.length === 3) {
+      // The part as presented. A PUT whose part is not an ordinal is refused below, and its
+      // line then names the upload and no part, which is what arrived.
+      named.upload = path[1]
+      if (Number.isInteger(Number(path[2]))) named.part = Number(path[2])
       return receivePart(path[1], path[2], url, req, res)
     }
-    if (method === 'POST' && path.length === 1 && path[0] === 'uploads') return create(req, res)
+    if (method === 'POST' && path.length === 1 && path[0] === 'uploads') return create(req, res, named)
     if (method === 'POST' && path.length === 3 && path[0] === 'uploads' && path[2] === 'urls') {
-      return mintUrls(path[1], url, req, res)
+      return mintUrls(path[1], url, req, res, named)
     }
     if (method === 'GET' && path.length === 3 && path[0] === 'uploads' && path[2] === 'parts') {
+      const asked = url.searchParams.get('uploadId')
+      if (asked !== null) named.upload = asked
       return listParts(path[1], url, req, res)
     }
     if (method === 'POST' && path.length === 3 && path[0] === 'uploads' && path[2] === 'complete') {
-      return completeUpload(path[1], req, res)
+      return completeUpload(path[1], req, res, named)
     }
     json(res, 404, { error: 'no such route' })
   }
@@ -147,7 +227,7 @@ export function createStandIn(options: StandInOptions = {}): StandIn {
   // `POST /uploads {ref, parts} -> {uploadId}`. The order is `create.ts`'s and the
   // refusals are its refusals, because the parity diff asks both sides the same fixtures
   // and a different order answers a different one of them.
-  async function create(req: IncomingMessage, res: ServerResponse): Promise<void> {
+  async function create(req: IncomingMessage, res: ServerResponse, named: Named): Promise<void> {
     const sub = bearerSub(req)
     if (sub === undefined) return json(res, 401, { error: 'unauthenticated' })
 
@@ -158,6 +238,7 @@ export function createStandIn(options: StandInOptions = {}): StandIn {
     }
 
     const uploadId = randomUUID()
+    named.upload = uploadId
     uploads.set(uploadId, {
       key: objectKey(sub, ref),
       planned: partCount(body.parts),
@@ -169,7 +250,13 @@ export function createStandIn(options: StandInOptions = {}): StandIn {
   }
 
   // `POST /uploads/{ref}/urls {uploadId, parts} -> {urls: [{partNumber, url}]}`.
-  async function mintUrls(ref: string, url: URL, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  async function mintUrls(
+    ref: string,
+    url: URL,
+    req: IncomingMessage,
+    res: ServerResponse,
+    named: Named,
+  ): Promise<void> {
     const sub = bearerSub(req)
     if (sub === undefined) return json(res, 401, { error: 'unauthenticated' })
     if (!validateRef(ref)) return json(res, 400, { error: 'invalid reference' })
@@ -179,6 +266,7 @@ export function createStandIn(options: StandInOptions = {}): StandIn {
     if (typeof uploadId !== 'string' || uploadId.length === 0) {
       return json(res, 400, { error: 'missing uploadId' })
     }
+    named.upload = uploadId
     const parts = partCount(body.parts)
     if (parts === undefined) return json(res, 400, { error: 'invalid part count' })
 
@@ -215,7 +303,12 @@ export function createStandIn(options: StandInOptions = {}): StandIn {
   // `create` was told it; the plane does not, and completes over whatever `ListParts`
   // returns. The body is the string `ControlPlaneWire.completed` reads as
   // `TransportError.incompleteUpload`.
-  async function completeUpload(ref: string, req: IncomingMessage, res: ServerResponse): Promise<void> {
+  async function completeUpload(
+    ref: string,
+    req: IncomingMessage,
+    res: ServerResponse,
+    named: Named,
+  ): Promise<void> {
     const sub = bearerSub(req)
     if (sub === undefined) return json(res, 401, { error: 'unauthenticated' })
     if (!validateRef(ref)) return json(res, 400, { error: 'invalid reference' })
@@ -225,6 +318,7 @@ export function createStandIn(options: StandInOptions = {}): StandIn {
     if (typeof uploadId !== 'string' || uploadId.length === 0) {
       return json(res, 400, { error: 'missing uploadId' })
     }
+    named.upload = uploadId
 
     const upload = under(sub, ref, uploadId)
     if (upload === undefined) return json(res, 404, { error: 'no such upload' })
@@ -283,6 +377,7 @@ export function createStandIn(options: StandInOptions = {}): StandIn {
     }
 
     if (!uploads.has(uploadId)) return json(res, 404, { error: 'no such upload' })
+    record(res, 200)
     res.writeHead(200, { etag: `"standin-${uploadId}-${part}"` })
     res.end()
   }
@@ -412,6 +507,7 @@ function deferred(): { promise: Promise<void>; settle: () => void } {
 // 403, with no body. The transport reads the status and nothing else (ADR-0007 §5), and a
 // body here would be a shape this repository has not declared.
 function refusePut(res: ServerResponse): void {
+  record(res, 403)
   res.writeHead(403)
   res.end()
 }
@@ -456,8 +552,32 @@ async function readJson(req: IncomingMessage): Promise<Record<string, unknown>> 
 }
 
 function json(res: ServerResponse, statusCode: number, body: unknown): void {
+  record(res, statusCode)
   res.writeHead(statusCode, { 'content-type': 'application/json' })
   res.end(JSON.stringify(body))
+}
+
+// The request log's hook, carried on the response so the two module-level responders can
+// reach it without a server to ask. It is absent unless a log was configured, and then
+// `record` does nothing.
+const RECORD = Symbol('the stand-in request log')
+type Recorded = ServerResponse & { [RECORD]?: (status: number) => void }
+
+// Called **before** the status line is written, so the line is on disk before the answer
+// can leave. Writing it from the response's `finish` event instead loses the last answers
+// of a run to the signal that ends it: the bytes reach the client, the callback is queued,
+// and a `kill` in between takes the process with the queue. Observed while this was
+// written — two requests answered, one line — which is the failure mode the log exists to
+// rule out rather than reproduce.
+//
+// No assertion carries this, and that is a ruling and not a gap. The cheap discriminator
+// does not discriminate: reading the log the moment the client sees the answer finds the
+// line already on disk 200 times out of 200 under either ordering, because the queued
+// callback still runs before a localhost client resolves. What separates the two is a
+// real signal mid-answer, and a simulated one is not lifecycle validation (CLAUDE.md).
+// The evidence is the observation above, recorded rather than staged as a test.
+function record(res: ServerResponse, status: number): void {
+  ;(res as Recorded)[RECORD]?.(status)
 }
 
 function flag(argv: readonly string[], name: string): string | undefined {
@@ -471,7 +591,10 @@ function flag(argv: readonly string[], name: string): string | undefined {
 function main(argv: readonly string[]): void {
   const bind = flag(argv, '--bind') ?? '127.0.0.1'
   const port = Number(flag(argv, '--port') ?? '0')
-  const server = createStandIn()
+  // The environment and not a flag, because the path is the run's and not the program's:
+  // the workflow names a file under `RUNNER_TEMP` and uploads it afterwards. Unset means no
+  // log, which is what a developer running the bundle by hand gets.
+  const server = createStandIn({ log: process.env.DUNNAGE_STANDIN_LOG })
   server.listen(port, bind, () => {
     console.log(`listening on http://${bind}:${(server.address() as AddressInfo).port}`)
   })

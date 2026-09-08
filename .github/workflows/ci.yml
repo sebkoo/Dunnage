@@ -266,6 +266,12 @@ jobs:
         shell: bash
         run: |
           set -u
+          # The request log, and it is a file of its own rather than this stdout. The read
+          # below stops at the port line and never drains the pipe again, so a request
+          # record written to stdout would fill the pipe buffer and block the stand-in in
+          # `write` — the instrument would stop the thing it is measuring. The path is the
+          # run's, so it is passed in the environment and not compiled into the bundle.
+          export DUNNAGE_STANDIN_LOG="$RUNNER_TEMP/standin-requests.jsonl"
           # Its stdout is read directly, so each try is a wait for a line and not a pause:
           # `read -t` returns when the line arrives, or when the try's second is up.
           exec 3< <(node standin-bundle/standin.js --port 0 2>&1)
@@ -433,6 +439,29 @@ jobs:
         with:
           name: app-test-results
           path: ${{ runner.temp }}/app-tests.xcresult
+
+      # Always, and that is the decision rather than an oversight. A green run's log is the
+      # only evidence the writer still works: upload it on failure alone and the writer's
+      # own health becomes observable only after something else has already broken, which
+      # is the position this instrument exists to get out of.
+      #
+      # The `.xcresult` above keeps `if: failure()` **on purpose**, and the two conditions
+      # are not to be harmonised. A result bundle is large and says nothing a green run
+      # needs; this is a few kilobytes of request lines, and reading it on a green run is
+      # what makes a later empty one mean something.
+      #
+      # It carries no body. `standin/server.ts` writes seven fields and never the payload,
+      # and `testEveryRequestTheStandInAnswersIsOnItsOwnLogWithTheUploadItNames` is what
+      # holds that: this artifact is public.
+      #
+      # `warn` and not `error` on an absent file: a run where the stand-in never started
+      # has no log to upload, and the failure that run should report is the start step's.
+      - uses: actions/upload-artifact@v7
+        if: ${{ always() }}
+        with:
+          name: standin-requests
+          path: ${{ runner.temp }}/standin-requests.jsonl
+          if-no-files-found: warn
 
       # The third producer, and it reads `enabledTests` only — `vitest list`'s reasoning:
       # a test a plan skips sits in `disabledTests`, and a producer that read both would

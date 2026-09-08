@@ -791,7 +791,7 @@ that deletes the two it confirms. The double's own contract for the parameter
 
 ### Phase 5's doubles keep the contracts they stand in for
 
-All twelve are deterministic: four under `swift test`, and eight under vitest against a
+All thirteen are deterministic: four under `swift test`, and nine under vitest against a
 server the suite starts in-process on a port the operating system assigns. The scripted wire
 stands in for `PartTaskSession`, this repository's contract for the daemon and the wire
 together, and never for `URLSession`: a double of a vendor's product runs a guess against
@@ -826,6 +826,21 @@ assert the plane behaves as it does not; and the plane cannot refuse an incomple
 at all, not knowing the plan's N. Each is the stand-in's own, each is tested here as the
 stand-in's own, and each is 4b's contract run to settle.
 
+The stand-in also writes down what it answered: one line per request, carrying `seq`, `ms`,
+`method`, `path`, `upload`, `part` and `status`, and **never a body** — a part's body is
+payload and the file leaves a runner as a public artifact. It is written to a file the run
+names and never to the stand-in's stdout, which CI reads for the port line and then stops
+reading: a record written there would fill the pipe buffer and block the stand-in in
+`write`, and the instrument would stop the thing it is measuring. The line reaches disk
+before the status line reaches the socket, so a signal that ends the process cannot take
+with it the answers already given — writing from the response's own completion event lost
+one of two answers on a run measured while this was written. It is attached to the response
+before the path is parsed, too: decoding a segment rejects a malformed escape by throwing,
+and the 500 that answers it is on the log with everything else, rather than being the one
+answer an instrument attached later would miss. CI uploads the file on every
+run and not only on a red one, because a green run's log is the only evidence the writer
+still works; the result bundle beside it keeps its own condition, for the opposite reason.
+
 - `testTheScriptedWireHoldsExactlyTheTasksCreatedOrSeededAndForgetsACancelledOne`
 - `testTheScriptedWireDeliversEachCompletionOnceInTheOrderTheTestGaveThem`
 - `testTheScriptedWireCountsAReceiptPerTaskCreatedAndNoneForAnUnparseableOne`
@@ -837,6 +852,7 @@ stand-in's own, and each is 4b's contract run to settle.
 - `testAUrlIsRefusedForAnotherPartAndAfterItsExpiry`
 - `testAnUploadIdNotUnderTheKeyIsRefused`
 - `testACompleteOverPartsItDoesNotHoldIsRefused`
+- `testEveryRequestTheStandInAnswersIsOnItsOwnLogWithTheUploadItNames`
 - `testTheStandInRefusesWhatThePlaneRefusesWithTheSameAnswer`
 
 ### The failure mode a transport that trusts its own reports reintroduces, kept working on purpose
