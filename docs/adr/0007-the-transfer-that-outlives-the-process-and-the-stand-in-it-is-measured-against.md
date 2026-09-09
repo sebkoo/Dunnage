@@ -347,6 +347,7 @@ in `DunnageTransport` — the same isolation as 4a's control under `test/`. It i
 - **The app runs one upload at a time.** The driver is single-upload (ADR-0005), so the app
   calls `resume` on each ledger upload in turn. That is a limit stated, not a concurrency
   design.
+  *ADR-0009 §4 changed what a turn can cost; which uploads to walk is ADR-0005 O-24.*
 - **Two ways to be unable to move remain.** ADR-0006's unparseable identity, now
   `.unrecognisedSession`, and its expired operation both still end in an upload that is not
   failed and cannot proceed. O-10's recovery is not decided here.

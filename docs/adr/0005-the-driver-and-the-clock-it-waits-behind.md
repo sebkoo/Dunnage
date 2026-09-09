@@ -310,3 +310,42 @@ by stopping — which it does, since every wait it takes is cancellable — is n
 and does not write to the log. Which object turns a user's "cancel this" into an
 `abandoned` event, and whether Core should produce an effect for it, is not decided, because
 there is no application yet to ask.
+
+### O-24. A relaunch resumes every upload on the log, and the forgotten ones now re-send
+
+`UploadModel.begin()` calls `resume` on every upload `uploads()` returns. Whether it should,
+or should resume only the uploads still being asked for, is open. The question is not whether
+the app should continue past an operation the authority has forgotten — it should, and O-10 is
+decided. It is what continuing came to cost once the resume stopped throwing.
+
+**The sentences describing it did not move when the cost did.** ADR-0009 §4 scoped
+`unknownSession` and `unrecognisedSession` out of §8, so a forgotten operation is now the one
+case that does not throw: it is replaced instead, and ADR-0009 §5 says what that costs —
+everything the dead operation held is sent again. The app's comment went on promising that a
+throw stops nothing else, which stayed true, and ADR-0007's *What this costs* went on saying
+the app calls `resume` on each ledger upload in turn, which stayed true as well. Neither said
+what a turn had come to cost, and ADR-0007's bullet took no mark when the bullet below it took
+ADR-0009 §4's. Both sites now point here.
+
+**What the loop walks.** `uploads()` enumerates the ledger directory and filters nothing:
+every upload ever declared, on every relaunch, whatever state it is in. The set only grows.
+
+**What that costs, by state rather than by count.** `UploadDriver.outstandingWork` produces no
+effects for `.completed` and `.failed`, so a terminal upload costs a records read and a replay
+and sends nothing. The bytes are charged against the non-terminal uploads whose operation the
+authority no longer has, and each of those re-sends in full. The parts the dead operation left
+keep costing storage until the bucket's seven-day rule reaches them — O-8's exposure with a
+second cause, recorded there rather than given a number here. The thesis is untouched, for the
+reason ADR-0009 §5 gives in its own clause: nothing is confirmed under the replacement's
+contract. This is a question about cost and not about correctness.
+
+**The alternative is not expressible on the log today.** `abandoned` is written in one place
+and only because Core asked for it; nothing turns an application's "no longer wanted" into an
+event. That is O-11. Until it is decided, "the uploads still being asked for" names no set the
+log can produce.
+
+**What is undecided, and what it costs meanwhile.** Whether the loop should filter at all,
+what it would filter on, and whether Core or the app should own the decision; nothing observed
+settles any of the three. Until then a relaunch pays a replay for every upload the ledger has
+ever held and a full re-send for every non-terminal one the authority has forgotten. No test
+holds this loop — the app's relaunch tests drive a single upload — and this entry adds none.

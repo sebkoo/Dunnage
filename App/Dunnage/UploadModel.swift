@@ -159,7 +159,9 @@ final class UploadModel: ObservableObject {
     }
 
     /// Adopt whatever the daemon still holds, then pick up every upload the ledger knows
-    /// about, in turn.
+    /// about, in turn. "Every" is the word that now carries a cost: the ledger enumerates
+    /// every upload ever declared, and one whose operation the authority has forgotten is
+    /// replaced and re-sent in full (ADR-0005 O-24).
     ///
     /// `adopt()` first and always: the registry is what a `send` consults before creating a
     /// task, and a send that ran before adoption would create a second task for a chunk
@@ -176,9 +178,12 @@ final class UploadModel: ObservableObject {
         }
         showing = uploads.last
         await refresh()
-        // In turn, and each one's failure is its own. A thrown error is no event (ADR-0005
-        // §8) and it says nothing about the next upload on the ledger; one upload the
-        // authority has forgotten must not stop the app picking up the rest.
+        // In turn, and each one's failure is its own. A thrown error is still no event
+        // (ADR-0005 §8) and still says nothing about the next upload on the ledger, so a
+        // throw here stops nothing else. What changed is which errors reach this catch: an
+        // operation the authority has forgotten no longer throws — it is replaced and
+        // re-sent in full (ADR-0009 §4, §5). Picking up the rest costs bytes it did not
+        // cost before, and what the loop should walk is ADR-0005 O-24.
         for upload in uploads {
             showing = upload
             do {
