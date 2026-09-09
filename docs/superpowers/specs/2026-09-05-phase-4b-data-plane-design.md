@@ -242,6 +242,12 @@ password flow is open to anyone on the internet, no hosted UI exists, and the po
 a login surface. `testTheOnlyAuthFlowIsOneThatNeedsTheAccountsOwnCredentials` asserts the
 rendered set exactly, and it is red today because the property is absent.
 
+*Superseded in part by ADR-0010 §2: an absent `ExplicitAuthFlows` is a documented
+default set and not an empty one — `ALLOW_REFRESH_TOKEN_AUTH`, `ALLOW_USER_SRP_AUTH`
+and `ALLOW_CUSTOM_AUTH` — so the sentence above holds only once the property is
+added, and the paragraph above establishes that it is absent. The rendered set it
+names still synthesises from `aws-cdk-lib` 2.267.0 exactly as written.*
+
 **The app is unchanged.** `token` stays the one place a token enters, exactly as it is: the
 operator mints a token with three CLI calls (§10, step 4) and pastes it into the field. It
 is an access token with an hour's life, so a run longer than an hour re-pastes one, and

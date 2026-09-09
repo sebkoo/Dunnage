@@ -56,14 +56,20 @@ the decision for provisional because a detail downstream of it is open.
 ### 2. The one property, and what it makes true
 
 The device client passes no authentication flows today, and the construct library renders no
-explicit set when none is given, so the template names none and no test reads one. The client
-gains the administrative user-password flow, which renders that flow and token refresh — and
-that flow requires the caller to hold account credentials for the administrative
-initiate-authentication call.
+explicit set when none is given, so the template names none and no test reads one. An absent
+`ExplicitAuthFlows` is not an empty one: Amazon Cognito's documented default for a client that
+names none is `ALLOW_REFRESH_TOKEN_AUTH`, `ALLOW_USER_SRP_AUTH` and `ALLOW_CUSTOM_AUTH`. A user
+this pool already holds can therefore sign in with a username and password over SRP at
+`InitiateAuth`, an operation that does not accept IAM credentials at all. The template closes
+self-service sign-up, so only an administrator can create such a user — but that bounds who
+signs in, not what a token costs.
 
-**So the only way to obtain a token for this stack is with the account's own credentials.** No
-password flow is open to the internet, no hosted sign-in surface exists, and the pool is not a
-login surface. Two tests assert the rendered set exactly rather than its shape.
+**The decision is to give the client the administrative user-password flow**, which renders
+`ALLOW_ADMIN_USER_PASSWORD_AUTH` and `ALLOW_REFRESH_TOKEN_AUTH` and no SRP, and whose
+`AdminInitiateAuth` call is IAM-authorized where `InitiateAuth` is not. **Once that set is
+rendered, the account's own credentials are the only way to a first token. Until it is, they
+are not.** No hosted sign-in surface exists either way. Two tests assert the rendered set
+exactly rather than its shape.
 
 The app does not change. A token enters in one place, as it already does: the operator mints
 one and pastes it in. It expires within the hour, so a longer run pastes another, and the
@@ -186,6 +192,16 @@ error's name and code verbatim rather than whether they matched.** Recording the
 than the verdict is what makes the record survive an unexpected answer. If the name differs,
 the correction is one function and one commit, which is why the reading was written before the
 run: it makes the run a check rather than an exploration.
+
+**UNVERIFIED: that a client refuses an authentication flow its `ExplicitAuthFlows` does not
+name.** The property is documented as the flows you want the client to support, and both
+authentication operations can raise `UnsupportedOperationException` for an operation "not
+enabled for the user pool client" — but no page joins those into one statement, and §2's
+second paragraph rests on the join.
+
+*What would settle it:* one `InitiateAuth` call with `USER_SRP_AUTH` against a deployed client
+whose `ExplicitAuthFlows` names only the administrative flow and refresh, **recording the
+error's name and code verbatim rather than whether the call was refused.**
 
 ## Observed against a deployed plane
 
