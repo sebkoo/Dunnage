@@ -536,9 +536,11 @@ object, the control has been broken and `create` has nothing left to be measured
 ## Phase 4b: Transport and data plane — a replacement inherits nothing, and the tree names no account
 
 O-10's recovery is decided in Core and in the driver, and it needs no cloud: a new event, four
-rows, and one written form on disk. What a deployed plane and S3 answer is a recorded run,
-written into an ADR and never into CI. See
-[ADR-0009](adr/0009-replacing-a-transport-operation-the-authority-no-longer-has.md).
+rows, and one written form on disk. The stack gains the four outputs a deploy has to report,
+each of them a reference rather than a literal. What a deployed plane and S3 answer is a
+recorded run, written into an ADR and never into CI. See
+[ADR-0009](adr/0009-replacing-a-transport-operation-the-authority-no-longer-has.md) and
+[ADR-0010](adr/0010-the-recorded-run-and-the-account-the-tree-never-names.md).
 
 ### An operation the authority no longer has is replaced, and the replacement inherits nothing the operation it replaces was told
 
@@ -574,6 +576,17 @@ about a chunk. The two tests are the boundary's two sides; neither alone locates
 
 - `testADriverGivenAnAuthorityThatForgotTheOperationRecordsTheLossAndOpensAnother`
 - `testADriverGivenATransportErrorThatIsNotTheAuthorityForgettingAppendsNothing`
+
+### A deploy reports the four values the procedure needs, and names no environment doing it
+
+Nothing in the template said what a deploy produced, and the procedure needs four values to
+address the stack it has just created. Each is a reference to a resource this stack defines, so
+CloudFormation resolves them at deploy time and no deployed value is ever written down here.
+Both halves are asserted together, because either alone passes on a broken stack: four outputs
+that do not exist cannot be caught carrying a literal, and four references establish nothing if
+they are not the four the procedure reads by name.
+
+- `testTheFourValuesADeployReportsExistByNameAndEachIsAReference`
 
 ### The failure mode a replacement that believes a dead operation's confirmation reintroduces, kept working on purpose
 

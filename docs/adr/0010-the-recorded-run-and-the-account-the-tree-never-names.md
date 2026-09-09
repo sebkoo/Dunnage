@@ -77,7 +77,7 @@ procedure says so rather than the app growing a sign-in flow.
 
 ### 3. Four outputs, each a reference
 
-Nothing in the template says what a deploy produced, and the procedure needs four values: the
+Nothing in the template said what a deploy produced, and the procedure needs four values: the
 API endpoint, the bucket, the pool, and the client. Four outputs carry them, and **each is a
 reference to a resource in this stack rather than a literal**, so the template still names no
 environment. The test asserts both halves — that the four exist by name, and that each value is

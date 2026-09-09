@@ -1,4 +1,4 @@
-import { Duration, RemovalPolicy, Stack, Tags } from 'aws-cdk-lib'
+import { CfnOutput, Duration, RemovalPolicy, Stack, Tags } from 'aws-cdk-lib'
 import type { StackProps } from 'aws-cdk-lib'
 import { HttpApi, HttpMethod } from 'aws-cdk-lib/aws-apigatewayv2'
 import { HttpJwtAuthorizer } from 'aws-cdk-lib/aws-apigatewayv2-authorizers'
@@ -138,6 +138,17 @@ export class DunnageStack extends Stack {
         route('Complete', 'complete', ['s3:ListMultipartUploadParts', 's3:PutObject']),
       ),
     })
+
+    // ADR-0010 §3. A deploy produces four values the procedure needs to address the stack it
+    // has just created, and nothing in the template said what they were. Each output is a
+    // reference to a resource this stack defines rather than a literal, so the template still
+    // names no environment: CloudFormation resolves these at deploy time and none of them is
+    // in this repository at any point. That is the half of the property this stack can hold on
+    // its own; the other half is the operator's, and ADR-0010 §4 is where it is decided.
+    new CfnOutput(this, 'ApiEndpoint', { value: api.apiEndpoint })
+    new CfnOutput(this, 'BucketName', { value: bucket.bucketName })
+    new CfnOutput(this, 'UserPoolId', { value: userPool.userPoolId })
+    new CfnOutput(this, 'UserPoolClientId', { value: userPoolClient.userPoolClientId })
 
     // Applied at the stack rather than at the app. Every template assertion in this phase is
     // made against `Template.fromStack(new DunnageStack(new App(), 'Dunnage'))`, which builds

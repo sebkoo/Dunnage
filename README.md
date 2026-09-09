@@ -175,13 +175,16 @@ the build has written one; `--no-lookups` is the flag CI passes, and it guards a
 
 ## Phase 4b: Transport and data plane — a replacement inherits nothing, and the tree names no account
 
-O-10's recovery, decided in Core and in the driver and needing no cloud. What a deployed plane
-and S3 answer is one recorded run, written into an ADR and never into CI. See
-[ADR-0009](docs/adr/0009-replacing-a-transport-operation-the-authority-no-longer-has.md).
+O-10's recovery, decided in Core and in the driver and needing no cloud, and the four values a
+deploy has to report before an operator can address the stack at all. What a deployed plane and
+S3 answer is one recorded run, written into an ADR and never into CI. See
+[ADR-0009](docs/adr/0009-replacing-a-transport-operation-the-authority-no-longer-has.md) and
+[ADR-0010](docs/adr/0010-the-recorded-run-and-the-account-the-tree-never-names.md).
 
 - An operation the authority no longer has is replaced, and the replacement inherits nothing the operation it replaces was told
 - A loss is evidence about the operation it names, and one naming another operation changes nothing
 - A transport error that is not the authority forgetting still reaches the log as nothing
+- A deploy reports the four values the procedure needs, and names no environment doing it
 - The failure mode a replacement that believes a dead operation's confirmation reintroduces, kept working on purpose
 
 ## Phase 5: App — the transfer outlives the process that started it
