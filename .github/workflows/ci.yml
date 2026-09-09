@@ -266,6 +266,61 @@ jobs:
         shell: bash
         run: |
           set -u
+          # ------------------------------------------------------------------
+          # BRANCH-ONLY DIAGNOSTIC. It must never reach main. It answers, in one
+          # run and without waiting for a 2-in-10 flake to fire, why the bundled
+          # stand-in's start on macos-26 reaches into the tens of seconds:
+          # whether the downloaded artifact carries com.apple.quarantine, and
+          # whether the first exec is far slower than the two after it, which is
+          # the Gatekeeper first-exec scan's signature. It also separates a slow
+          # start from a hang, which decides whether any window change helps at
+          # all. `sleep` and `date` are orchestration here, not a suite test.
+          echo "node: $(node --version)"
+          echo "quarantine and other xattrs on the downloaded bundle:"
+          xattr -l standin-bundle/standin.js || true
+          echo "  (no lines above means no extended attributes)"
+          # Three back-to-back execs, each under a ceiling well above anything
+          # observed (30 tries have measured 40.8 s, 45.8 s and 52.3 s of wall
+          # clock), each started in the background with its pid captured and
+          # killed by that pid — never by pattern, so nothing this job did not
+          # start can be reached. The environment matches the real invocation
+          # below, with the log pointed at a probe path so the artifact stays
+          # this run's own.
+          for attempt in 1 2 3; do
+            probe_out="$RUNNER_TEMP/standin-probe-$attempt.out"
+            : > "$probe_out"
+            # python3 for the clock: BSD date has no %N, and whole seconds cannot
+            # tell a 20 s first exec from a 0.2 s third one.
+            began=$(python3 -c 'import time; print(time.time())')
+            DUNNAGE_STANDIN_LOG="$RUNNER_TEMP/standin-probe-$attempt.jsonl" \
+              node standin-bundle/standin.js --port 0 > "$probe_out" 2>&1 &
+            probe_pid=$!
+            probe_port=""
+            # A wall-clock deadline off `began`, not a count of tries: thirty tries
+            # measured 40.8 s, 45.8 s and 52.3 s on three runs, so a count's message
+            # cannot say in seconds what it enforced. Whole seconds are enough for the
+            # ceiling; `began` and `ended` still measure the elapsed time precisely.
+            deadline=$(python3 -c "print(int($began) + 120)")
+            while [ "$(date +%s)" -lt "$deadline" ]; do
+              probe_port=$(sed -n 's|^listening on http://127.0.0.1:||p' "$probe_out")
+              [ -n "$probe_port" ] && break
+              sleep 1
+            done
+            ended=$(python3 -c 'import time; print(time.time())')
+            elapsed=$(python3 -c "print(f'{$ended - $began:.2f}')")
+            if [ -n "$probe_port" ]; then
+              echo "probe $attempt: port $probe_port after ${elapsed}s"
+            else
+              echo "probe $attempt: NO PORT within 120 s (${elapsed}s), and it is alive or not below"
+              ps -o pid,%cpu,state,command -p "$probe_pid" || echo "  pid $probe_pid is gone"
+              echo "  what it wrote, if anything:"
+              cat "$probe_out" || true
+            fi
+            kill "$probe_pid" 2>/dev/null || true
+            wait "$probe_pid" 2>/dev/null || true
+          done
+          echo "end of the branch-only diagnostic"
+          # ------------------------------------------------------------------
           # The request log, and it is a file of its own rather than this stdout. The read
           # below stops at the port line and never drains the pipe again, so a request
           # record written to stdout would fill the pipe buffer and block the stand-in in
