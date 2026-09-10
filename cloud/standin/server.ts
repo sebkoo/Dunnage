@@ -589,12 +589,24 @@ function flag(argv: readonly string[], name: string): string | undefined {
 // assigns and prints it, which is what commit 8's job reads. `--bind 0.0.0.0` is the device
 // harness's, where an operator types the Mac's address into the app (spec §3.4).
 function main(argv: readonly string[]): void {
+  // Two stamps, both before the line the workflow matches and never on it. `ci.yml` reads
+  // the port with `${line##*:}`, so anything appended to the listening line becomes the
+  // port; and the reader stops at that line and never drains the pipe again, so a line
+  // written after it would block this process in `write` — the invariant the workflow
+  // already states about the request log.
+  //
+  // `process.uptime()` runs from this process's own start, so the first stamp is the cost of
+  // spawn, V8 and evaluating this bundle, and the second brackets `createStandIn`. A run
+  // whose stamps arrive late but read small is a slow pipe rather than a slow start, and
+  // nothing in the output today can tell those two apart.
+  console.log(`standin: main entered at ${process.uptime().toFixed(3)}s`)
   const bind = flag(argv, '--bind') ?? '127.0.0.1'
   const port = Number(flag(argv, '--port') ?? '0')
   // The environment and not a flag, because the path is the run's and not the program's:
   // the workflow names a file under `RUNNER_TEMP` and uploads it afterwards. Unset means no
   // log, which is what a developer running the bundle by hand gets.
   const server = createStandIn({ log: process.env.DUNNAGE_STANDIN_LOG })
+  console.log(`standin: binding ${bind}:${port} at ${process.uptime().toFixed(3)}s`)
   server.listen(port, bind, () => {
     console.log(`listening on http://${bind}:${(server.address() as AddressInfo).port}`)
   })

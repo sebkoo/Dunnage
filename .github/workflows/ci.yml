@@ -266,6 +266,16 @@ jobs:
         shell: bash
         run: |
           set -u
+          # Three stamps, from bash's own SECONDS. Not `date`: a subprocess inside the
+          # interval t1 opens perturbs the thing it is there to measure, and SECONDS is a
+          # shell variable that costs nothing. Whole seconds is the resolution this question
+          # needs — 30 against 41 — and `process.uptime()` carries the fine resolution on the
+          # side that has the fine question.
+          #
+          # `setup` is a negative control and is expected to read 0: only the export below
+          # lies between this line and the exec. It is printed anyway, because the day it
+          # reads non-zero the finding is that the runner stalled before node was asked for.
+          t0=$SECONDS
           # The request log, and it is a file of its own rather than this stdout. The read
           # below stops at the port line and never drains the pipe again, so a request
           # record written to stdout would fill the pipe buffer and block the stand-in in
@@ -274,15 +284,28 @@ jobs:
           export DUNNAGE_STANDIN_LOG="$RUNNER_TEMP/standin-requests.jsonl"
           # Its stdout is read directly, so each try is a wait for a line and not a pause:
           # `read -t` returns when the line arrives, or when the try's second is up.
+          t1=$SECONDS
           exec 3< <(node standin-bundle/standin.js --port 0 2>&1)
-          port=""; seen=""
+          port=""; seen=""; tries=0
           for _ in $(seq 1 30); do
+            tries=$((tries+1))
             IFS= read -r -t 1 line <&3 || continue
             seen="$seen$line"$'\n'
             case "$line" in
               "listening on http://127.0.0.1:"*) port=${line##*:}; break ;;
             esac
           done
+          # Taken here rather than after the branch below, which runs `wc -c` and a `pgrep -f`
+          # over the runner's whole process table. A t2 on the far side of those would
+          # re-measure what the log's own timestamps already show instead of the wait.
+          #
+          # `wait` and not `loop`: t1 is taken before the exec, so this interval holds the
+          # process substitution and the three initialisations as well as the reads — and the
+          # stand-in's own start too, because `exec 3< <(…)` returns when the redirection is
+          # set up rather than when the process is ready. Naming it for the loop would file a
+          # slow start under the reader's name, which is the paragraph below's own mistake
+          # made by its label. The two uptime stamps partition this interval from inside.
+          t2=$SECONDS
           # A try is not a second. `read -t 1` returns when the line arrives or when the
           # try's second is up, so thirty tries bound the number of questions and not the
           # wall clock — on the run that produced this branch they took fifty-two seconds.
@@ -290,6 +313,23 @@ jobs:
           # who takes seconds at face value goes looking for a thirty-second cause that is
           # not there. That is O-19's shape in the opposite direction: there a bound in
           # seconds was fed by a count, here a count was reported as seconds.
+          #
+          # What a question buys changed with the stamps: the stand-in prints two lines
+          # before the one this loop matches, so a healthy start now spends three tries where
+          # it spent one. Thirty still bounds the count, and the count is still not seconds.
+          #
+          # And that explanation covers only a run where lines arrive early. It cannot cover
+          # a silent one: with zero bytes every read consumes its full second, so thirty tries
+          # are thirty seconds exactly. Run 34412932594 printed nothing and took 41.02 s
+          # between `##[endgroup]` and the error, so eleven seconds are a second unknown that
+          # the first has been hiding.
+          #
+          # `wait` settles where those eleven are, and it settles it by subtraction rather
+          # than by measuring them: the stamps span t0 to t2 only, so `##[endgroup]` to t0 and
+          # t2 to the line printed below both fall outside every stamp here. A `wait` near 30
+          # puts the residue outside the wait; near 41 puts it inside. Neither figure accounts
+          # for the whole window on its own, and reading either as if it did is the mistake
+          # this paragraph exists to prevent.
           #
           # An empty `seen` is a known outcome now rather than a surprise, and on its own
           # it separates nothing: a process that never started, one that died silently and
@@ -299,6 +339,7 @@ jobs:
           # artifact is visible; whether a process still matches tells died from slow.
           if [ -z "$port" ]; then
             echo "::error::the stand-in did not print a port within 30 tries"
+            echo "setup $((t1-t0))s, wait $((t2-t1))s over $tries tries"
             echo "what it printed, if anything:"
             if [ -n "$seen" ]; then printf '%s' "$seen"; else echo "  nothing at all"; fi
             if [ -f standin-bundle/standin.js ]; then
@@ -316,6 +357,11 @@ jobs:
           fi
           echo "STANDIN_PID=$(pgrep -f 'standin-bundle/standin.js' | head -1)" >> "$GITHUB_ENV"
           echo "STANDIN_BASE_URL=http://127.0.0.1:$port" >> "$GITHUB_ENV"
+          echo "setup $((t1-t0))s, wait $((t2-t1))s over $tries tries"
+          # Printed on the green path too. A start that took twenty-eight tries and one that
+          # took three are both green today and look identical in the log; this is where a
+          # slow start becomes visible before it becomes a red one.
+          printf 'what the stand-in printed on its way up:\n%s' "$seen"
           echo "the stand-in is listening on http://127.0.0.1:$port"
 
       # A guard, not a negative control, like 4a's context-file check: it demonstrates
